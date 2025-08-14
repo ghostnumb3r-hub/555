@@ -1640,7 +1640,50 @@ def update_accuracy_content(generate_clicks, toggle_clicks):
         })
     ])
 
+def auto_startup_refresh():
+    """Auto-refresh dati e analisi all'avvio del wallet"""
+    print("🔄 AUTO-REFRESH: Aggiornamento dati all'avvio...")
+    
+    try:
+        # === AUTO-REFRESH DATI WALLET ===
+        global wallet_df
+        wallet_df = load_and_save_wallet_data()
+        print("✅ AUTO-REFRESH: Dati wallet aggiornati")
+        
+        # === AUTO-SAVE RACCOMANDAZIONI ===
+        try:
+            current_recommendations = get_4_assets_recommendations()
+            rec_count = recommendation_tracker.save_current_recommendations(
+                current_recommendations, 
+                wallet_df.to_dict('records') if not wallet_df.empty else [],
+                {'perf_1w': perf_1w, 'perf_1m': perf_1m, 'perf_6m': perf_6m, 'perf_1y': perf_1y}
+            )
+            perf_count = recommendation_tracker.save_market_performance(perf_1w)
+            print(f"✅ AUTO-REFRESH: {rec_count} raccomandazioni + {perf_count} performance salvate")
+        except Exception as e:
+            print(f"⚠️ AUTO-REFRESH: Tracking parziale - {e}")
+        
+        # === AUTO-CARICAMENTO 555BT ===
+        analysis = load_555bt_analysis()
+        if analysis['available']:
+            ml_count = len(analysis['ml_predictions'])
+            tech_count = len(analysis['technical_signals'])
+            rec_count = len(analysis['portfolio_recommendations'])
+            print(f"✅ AUTO-REFRESH: 555BT caricato - ML:{ml_count} Tecnici:{tech_count} Raccomandazioni:{rec_count}")
+        else:
+            print("⚠️ AUTO-REFRESH: Nessun dato 555BT trovato (esegui 555bt.py per generare analisi)")
+        
+        print("🎉 AUTO-REFRESH: Wallet completamente aggiornato all'avvio!")
+        
+    except Exception as e:
+        print(f"❌ AUTO-REFRESH: Errore durante l'aggiornamento - {e}")
+        print("⚠️ AUTO-REFRESH: Il wallet partirà comunque, ma i dati potrebbero non essere aggiornati")
+
 if __name__ == "__main__":
     print("💼 Avvio Wallet Dashboard...")
+    
+    # === AUTO-REFRESH ALL'AVVIO ===
+    auto_startup_refresh()
+    
     print("🌍 Accesso: http://localhost:8051")
     app.run(debug=True, port=8051)

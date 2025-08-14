@@ -216,15 +216,59 @@ def invia_messaggio_telegram(msg):
     # Pulisci solo i caratteri problematici ma mantieni la formattazione base
     clean_msg = msg.replace('```', '`').replace('**', '*')  # Converti formattazione HTML a Markdown
     
-    # Gestione intelligente della lunghezza del messaggio
-    if len(clean_msg) > 4090:  # Lascia margine per il footer
-        print(f"🔍 [RENDER-DEBUG] Messaggio troppo lungo, troncamento...")
-        # Trova un punto di taglio sensato (fine riga)
-        cut_point = clean_msg.rfind('\n', 0, 4000)
-        if cut_point == -1:
-            cut_point = 4000
-        clean_msg = clean_msg[:cut_point] + "\n\n... (continua nel prossimo messaggio)"
-        print(f"🔍 [RENDER-DEBUG] Messaggio troncato a: {len(clean_msg)} caratteri")
+    # 🔧 FIX: Divisione automatica messaggi lunghi
+    if len(clean_msg) > 2500:  # Soglia più bassa per sicurezza
+        print(f"🔧 [FIX] Messaggio lungo ({len(clean_msg)} caratteri), divisione automatica...")
+        
+        # Dividi il messaggio in parti da 2400 caratteri
+        parts = []
+        start = 0
+        part_num = 1
+        
+        while start < len(clean_msg):
+            # Trova punto di taglio intelligente
+            end = start + 2400
+            if end >= len(clean_msg):
+                end = len(clean_msg)
+            else:
+                # Trova ultimo \n prima del limite
+                cut_point = clean_msg.rfind('\n', start, end)
+                if cut_point > start:
+                    end = cut_point
+            
+            part = clean_msg[start:end]
+            if len(parts) == 0:
+                part = f"📤 PARTE {part_num}\n\n" + part
+            else:
+                part = f"📤 PARTE {part_num} (continua)\n\n" + part
+            
+            parts.append(part)
+            start = end
+            part_num += 1
+        
+        print(f"🔧 [FIX] Messaggio diviso in {len(parts)} parti")
+        
+        # Invia ogni parte con pausa
+        all_success = True
+        for i, part in enumerate(parts):
+            success = _send_single_message(part, url)
+            if success:
+                print(f"✅ [FIX] Parte {i+1}/{len(parts)} inviata ({len(part)} caratteri)")
+            else:
+                print(f"❌ [FIX] Parte {i+1}/{len(parts)} fallita")
+                all_success = False
+            
+            # Pausa tra parti per evitare rate limiting
+            if i < len(parts) - 1:
+                time.sleep(2)
+        
+        return all_success
+    else:
+        # Messaggio normale
+        return _send_single_message(clean_msg, url)
+
+
+def _send_single_message(clean_msg, url):
     
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
