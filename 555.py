@@ -6131,8 +6131,8 @@ host = '0.0.0.0'
 print("🚀 Dashboard Finanziaria Unificata - Layout Verticale")
 print(f"   🌍 Server running on {host}:{port}")
 
-# Browser opening disabled for server deployment
-# webbrowser.open("http://127.0.0.1:8050")
+# Browser opening for local development
+webbrowser.open("http://127.0.0.1:8050")
 
 app.run(debug=False, host=host, port=port)
 
