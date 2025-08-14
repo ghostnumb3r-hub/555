@@ -1,37 +1,19 @@
-# Core Dash and web framework dependencies
 dash==2.14.2
 dash-bootstrap-components==1.5.0
 flask==2.3.3
-
-# Data processing and analysis
-pandas==2.1.3
-numpy==1.24.3
-
-# Machine Learning libraries
-scikit-learn==1.3.2
-xgboost==2.0.1
-
-# Plotting and visualization
-plotly==5.17.0
-
-# HTTP requests and RSS feed parsing
-requests==2.31.0
-feedparser==6.0.10
-
-# Date and time handling
-pytz==2023.3
-
-# Web server for production deployment
-gunicorn==21.2.0
-
-# Optional performance optimizations
-lru-dict==1.2.0
-
-# System and utility libraries (usually built-in, but listed for completeness)
-# datetime - built-in
-# threading - built-in
-# time - built-in
-# io - built-in
-# os - built-in
-# warnings - built-in
-# functools - built-in
+pandas>=2.2.0
+plotly>=5.17.0
+requests>=2.31.0
+numpy>=1.24.0
+python-telegram-bot>=20.0
+schedule>=1.2.0
+feedparser>=6.0.10
+beautifulsoup4>=4.12.0
+textblob>=0.17.1
+scikit-learn>=1.3.0
+xgboost>=1.7.0
+yfinance>=0.2.0
+fredapi>=0.5.0
+cryptocompare>=0.7.0
+openpyxl>=3.1.0
+threading-timer>=0.1.0
