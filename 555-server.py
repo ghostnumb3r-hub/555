@@ -68,6 +68,80 @@ ensure_directories()
 app = dash.Dash(__name__)
 server = app.server
 
+# === PWA CONFIGURATION ===
+# Configura app per PWA
+app.index_string = '''
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        <link rel="icon" type="image/x-icon" href="/assets/favicon.ico">
+        
+        <!-- PWA Meta Tags -->
+        <meta name="theme-color" content="#00d4aa">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="default">
+        <meta name="apple-mobile-web-app-title" content="Dashboard 555">
+        <meta name="application-name" content="Dashboard 555">
+        
+        <!-- PWA Manifest -->
+        <link rel="manifest" href="/assets/manifest.json">
+        
+        <!-- Apple Touch Icons -->
+        <link rel="apple-touch-icon" href="/assets/icon-192x192.png">
+        <link rel="apple-touch-icon" sizes="152x152" href="/assets/icon-152x152.png">
+        <link rel="apple-touch-icon" sizes="144x144" href="/assets/icon-144x144.png">
+        <link rel="apple-touch-icon" sizes="120x120" href="/assets/icon-128x128.png">
+        
+        {%css%}
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+        
+        <!-- Service Worker Registration -->
+        <script>
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                    navigator.serviceWorker.register('/assets/sw.js')
+                        .then(function(registration) {
+                            console.log('[SW] Registration successful:', registration.scope);
+                        })
+                        .catch(function(error) {
+                            console.log('[SW] Registration failed:', error);
+                        });
+                });
+            }
+        </script>
+    </body>
+</html>
+'''
+
+# Route per servire assets PWA
+@server.route('/assets/<path:filename>')
+def serve_assets(filename):
+    """Serve file PWA dalla cartella assets"""
+    try:
+        if filename == 'manifest.json':
+            return flask.send_from_directory('assets', filename, mimetype='application/manifest+json')
+        elif filename == 'sw.js':
+            return flask.send_from_directory('assets', filename, mimetype='application/javascript')
+        elif filename.endswith('.png'):
+            return flask.send_from_directory('assets', filename, mimetype='image/png')
+        else:
+            return flask.send_from_directory('assets', filename)
+    except Exception as e:
+        print(f"❌ [PWA] Errore servendo {filename}: {e}")
+        return flask.abort(404)
+
+print("📱 [PWA] Configurazione Progressive Web App caricata!")
+
 # === TELEGRAM CONFIG ===
 TELEGRAM_TOKEN = "8396764345:AAH2aFy5lLAnr4xf-9FU91cWkYIrdG1f7hs"
 TELEGRAM_CHAT_ID = "@abkllr"
