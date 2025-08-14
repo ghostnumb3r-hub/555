@@ -12,6 +12,8 @@ import feedparser
 import webbrowser
 import os
 import pytz
+from urllib.request import urlopen
+from urllib.error import URLError
 
 # === OTTIMIZZAZIONI PERFORMANCE 555-TURBO ===
 try:
@@ -5854,20 +5856,69 @@ def export_csv(n_clicks, selected_horizon):
 
 
 if __name__ == "__main__":
-    def schedule_telegram_reports():
+def keep_app_alive(app_url):
+    """Function to ping the app URL to keep it alive"""
+    try:
+        response = urlopen(app_url)
+        return response.getcode() == 200
+    except URLError as e:
+        print(f"❌ [KEEP-ALIVE] Failed to ping app: {e}")
+        return False
+
+def is_keep_alive_time():
+    """Check if current time is within scheduled events time windows"""
+    import pytz
+    italy_tz = pytz.timezone('Europe/Rome')
+    now = datetime.datetime.now(italy_tz)
+    
+    # List of scheduled event times with windows (start 10 min before, end 10 min after)
+    scheduled_times = [
+        # Morning briefing at 09:00
+        (8, 50, 9, 10),  # (start_hour, start_minute, end_hour, end_minute)
+        # Unified report at 13:00
+        (12, 50, 13, 10),
+        # Monday weekly report at 13:05
+        (12, 55, 13, 15)  # Only on Mondays, but we'll check day in the logic
+    ]
+    
+    # Check if current time is in any of the scheduled windows
+    for start_h, start_m, end_h, end_m in scheduled_times:
+        # Special case for Monday weekly report
+        if start_h == 12 and start_m == 55 and now.weekday() != 0:  # Not Monday
+            continue
+            
+        # Create time objects for comparison
+        start_time = now.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
+        end_time = now.replace(hour=end_h, minute=end_m, second=0, microsecond=0)
+        
+        # Check if current time is in the window
+        if start_time <= now <= end_time:
+            return True
+    
+    return False
+
+def schedule_telegram_reports():
         import pytz
         italy_tz = pytz.timezone('Europe/Rome')
+        
+        # Get app URL from environment or use default local URL
+        app_url = os.environ.get('RENDER_EXTERNAL_URL', 'http://localhost:8050')
+        last_ping_time = datetime.datetime.now()
+        keep_alive_interval_minutes = 5  # Ping every 5 minutes during active windows
+        
+        print(f"🔄 [KEEP-ALIVE] Smart keep-alive initialized for URL: {app_url}")
+        print(f"⏰ [KEEP-ALIVE] Will ping app around scheduled events: 09:00, 13:00, and Monday 13:05")
         
         while True:
             # Usa il fuso orario italiano
             now = datetime.datetime.now(italy_tz)
             print(f"🕐 Orario Italia: {now.strftime('%H:%M:%S')} - {now.strftime('%d/%m/%Y')}")
             
-            # INVIO REPORT SETTIMANALE SEPARATO ogni lunedì alle 13:15
-            if now.weekday() == 0 and now.hour == 13 and now.minute == 15:  # Lunedì alle 13:15 ora italiana
+            # INVIO REPORT SETTIMANALE SEPARATO ogni lunedì alle 13:05
+            if now.weekday() == 0 and now.hour == 13 and now.minute == 5:  # Lunedì alle 13:05 ora italiana
                 if is_feature_enabled("backtest_reports"):
                     try:
-                        print(f"📅 [SCHEDULER] Lunedì 12:45 - Generazione e invio report settimanale separato...")
+                        print(f"📅 [SCHEDULER] Lunedì 13:05 - Generazione e invio report settimanale separato...")
                         weekly_backtest = generate_weekly_backtest_summary()
                         if weekly_backtest:
                             # Prepara il messaggio settimanale con header specifico
@@ -5921,11 +5972,11 @@ if __name__ == "__main__":
                     print(f"ℹ️ [SCHEDULER] Report mensile saltato perché la funzione è disabilitata")
                 time.sleep(60)
             
-            # INVIO RASSEGNA STAMPA MATTUTINA ALLE 09:33 (ora italiana)
-            elif (now.hour == 9 and now.minute == 33):
+            # INVIO RASSEGNA STAMPA MATTUTINA ALLE 09:00 (ora italiana)
+            elif (now.hour == 9 and now.minute == 0):
                 if is_feature_enabled("scheduled_reports"):
                     try:
-                        print(f"🌅 [SCHEDULER] Trigger delle 09:33 rilevato - Avvio rassegna stampa mattutina...")
+                        print(f"🌅 [SCHEDULER] Trigger delle 09:00 rilevato - Avvio rassegna stampa mattutina...")
                         
                         # Chiama la funzione di rassegna stampa mattutina completa
                         print("📰 [SCHEDULER] Generazione rassegna stampa mattutina...")
@@ -5937,11 +5988,11 @@ if __name__ == "__main__":
                             print("❌ [SCHEDULER] Rassegna stampa mattutina fallita")
                         
                     except Exception as e:
-                        print(f"❌ [SCHEDULER] Errore critico durante la rassegna delle 09:33: {e}")
+                        print(f"❌ [SCHEDULER] Errore critico durante la rassegna delle 09:00: {e}")
                         import traceback
                         traceback.print_exc()
                 else:
-                    print(f"ℹ️ [SCHEDULER] Rassegna delle 09:33 saltata - funzione scheduled_reports disabilitata")
+                    print(f"ℹ️ [SCHEDULER] Rassegna delle 09:00 saltata - funzione scheduled_reports disabilitata")
                 
                 time.sleep(60)  # Pausa per evitare invii multipli nello stesso minuto
             
@@ -5971,9 +6022,51 @@ if __name__ == "__main__":
             
             time.sleep(30)
 
-    # Avvia lo scheduler
+    # === SMART KEEP-ALIVE THREAD ===
+    def smart_keep_alive():
+        """Smart keep-alive that only activates during scheduled message windows"""
+        import pytz
+        italy_tz = pytz.timezone('Europe/Rome')
+        app_url = os.environ.get('RENDER_EXTERNAL_URL', 'http://localhost:8050')
+        
+        print(f"🤖 [SMART-KEEPALIVE] Started for URL: {app_url}")
+        print(f"⏰ [SMART-KEEPALIVE] Will activate during: 09:23-09:43, 12:50-13:10, 13:05-13:25 (Mon only)")
+        
+        while True:
+            try:
+                current_time = datetime.datetime.now(italy_tz)
+                
+                # Check if we're in a scheduled window
+                if is_keep_alive_time():
+                    print(f"🟢 [SMART-KEEPALIVE] Active window detected - {current_time.strftime('%H:%M:%S')}")
+                    
+                    # Ping the app to keep it awake
+                    ping_success = keep_app_alive(app_url)
+                    if ping_success:
+                        print(f"✅ [SMART-KEEPALIVE] Ping successful at {current_time.strftime('%H:%M:%S')}")
+                    else:
+                        print(f"❌ [SMART-KEEPALIVE] Ping failed at {current_time.strftime('%H:%M:%S')}")
+                    
+                    # Sleep for 5 minutes during active windows
+                    time.sleep(300)  # 5 minutes
+                else:
+                    # Not in active window - sleep for longer to save resources
+                    if current_time.minute % 30 == 0:  # Log every 30 minutes when inactive
+                        print(f"⚪ [SMART-KEEPALIVE] Dormant mode - {current_time.strftime('%H:%M:%S')}")
+                    time.sleep(600)  # 10 minutes during dormant periods
+                    
+            except Exception as e:
+                print(f"❌ [SMART-KEEPALIVE] Error: {e}")
+                time.sleep(300)  # 5 minutes on error
+    
+    # Start both threads
     scheduler_thread = threading.Thread(target=schedule_telegram_reports, daemon=True)
     scheduler_thread.start()
+    
+    keep_alive_thread = threading.Thread(target=smart_keep_alive, daemon=True)
+    keep_alive_thread.start()
+    
+    print("🚀 [THREADS] Both scheduler and smart keep-alive threads started")
     
     # Configurazione per deployment (Render-compatible)
     import os
