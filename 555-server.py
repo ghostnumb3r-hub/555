@@ -6286,11 +6286,12 @@ print("🚀 [THREADS] Both scheduler and smart keep-alive threads started")
 
 # Configurazione per deployment (Render-compatible)
 import os
-port = int(os.environ.get('PORT', 8050))
+port = int(os.environ.get('PORT', 10000))
 host = '0.0.0.0'
 
-# Avvia il server unificato
-print("🚀 Dashboard Finanziaria Unificata - Layout Verticale")
+print("🚀 [555-SERVER] Dashboard Finanziaria Server - Render Mode")
+print(f"🌍 [RENDER] Server running on {host}:{port}")
+print(f"🔍 [RENDER] PORT env variable: {os.environ.get('PORT', 'NOT SET')}")
 print(f"   🌍 Server running on {host}:{port}")
 
 # === MULTI-APP STARTUP ===
