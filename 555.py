@@ -6059,26 +6059,26 @@ def smart_keep_alive():
                 print(f"❌ [SMART-KEEPALIVE] Error: {e}")
                 time.sleep(300)  # 5 minutes on error
     
-    # Start both threads
-    scheduler_thread = threading.Thread(target=schedule_telegram_reports, daemon=True)
-    scheduler_thread.start()
-    
-    keep_alive_thread = threading.Thread(target=smart_keep_alive, daemon=True)
-    keep_alive_thread.start()
-    
-    print("🚀 [THREADS] Both scheduler and smart keep-alive threads started")
-    
-    # Configurazione per deployment (Render-compatible)
-    import os
-    port = int(os.environ.get('PORT', 8050))
-    host = '0.0.0.0'
-    
-    # Avvia il server unificato
-    print("🚀 Dashboard Finanziaria Unificata - Layout Verticale")
-    print(f"   🌍 Server running on {host}:{port}")
-    
-    # Browser opening disabled for server deployment
-    # webbrowser.open("http://127.0.0.1:8050")
-    
-    app.run(debug=False, host=host, port=port)
+# Start both threads
+scheduler_thread = threading.Thread(target=schedule_telegram_reports, daemon=True)
+scheduler_thread.start()
+
+keep_alive_thread = threading.Thread(target=smart_keep_alive, daemon=True)
+keep_alive_thread.start()
+
+print("🚀 [THREADS] Both scheduler and smart keep-alive threads started")
+
+# Configurazione per deployment (Render-compatible)
+import os
+port = int(os.environ.get('PORT', 8050))
+host = '0.0.0.0'
+
+# Avvia il server unificato
+print("🚀 Dashboard Finanziaria Unificata - Layout Verticale")
+print(f"   🌍 Server running on {host}:{port}")
+
+# Browser opening disabled for server deployment
+# webbrowser.open("http://127.0.0.1:8050")
+
+app.run(debug=False, host=host, port=port)
 
