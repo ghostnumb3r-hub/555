@@ -5975,10 +5975,17 @@ if __name__ == "__main__":
     scheduler_thread = threading.Thread(target=schedule_telegram_reports, daemon=True)
     scheduler_thread.start()
     
+    # Configurazione per deployment (Render-compatible)
+    import os
+    port = int(os.environ.get('PORT', 8050))
+    host = '0.0.0.0'
+    
     # Avvia il server unificato
     print("🚀 Dashboard Finanziaria Unificata - Layout Verticale")
-    print("   🌍 Accesso completo: http://localhost:8050")
-    webbrowser.open("http://127.0.0.1:8050")
+    print(f"   🌍 Server running on {host}:{port}")
     
-    app.run(debug=False, port=8050)
+    # Browser opening disabled for server deployment
+    # webbrowser.open("http://127.0.0.1:8050")
+    
+    app.run(debug=False, host=host, port=port)
 
