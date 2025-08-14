@@ -5856,16 +5856,16 @@ def export_csv(n_clicks, selected_horizon):
 
 
 if __name__ == "__main__":
-def keep_app_alive(app_url):
-    """Function to ping the app URL to keep it alive"""
-    try:
-        response = urlopen(app_url)
-        return response.getcode() == 200
-    except URLError as e:
-        print(f"❌ [KEEP-ALIVE] Failed to ping app: {e}")
-        return False
+    def keep_app_alive(app_url):
+        """Function to ping the app URL to keep it alive"""
+        try:
+            response = urlopen(app_url)
+            return response.getcode() == 200
+        except URLError as e:
+            print(f"❌ [KEEP-ALIVE] Failed to ping app: {e}")
+            return False
 
-def is_keep_alive_time():
+    def is_keep_alive_time():
     """Check if current time is within scheduled events time windows"""
     import pytz
     italy_tz = pytz.timezone('Europe/Rome')
