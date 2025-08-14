@@ -30,29 +30,6 @@ except ImportError:
     CORE_INDICATORS = ["MAC", "RSI", "MACD", "Bollinger", "EMA"]
     SPEED_TIMEOUTS = {"http_request_timeout": 10}
 
-# === RENDER RAM OPTIMIZATION ===
-RENDER_MODE = os.environ.get('RENDER', 'false').lower() == 'true'
-if RENDER_MODE:
-    print("🚀 [RENDER] Modalità Render attivata - Ottimizzazioni RAM 512MB")
-    try:
-        from render_ram_optimizer import (
-            RenderMemoryManager, RenderMessageGenerator, 
-            RenderLightweightModels, RenderDataLoader,
-            RenderIndicators, RenderMLProcessor
-        )
-        
-        # Inizializza il sistema ottimizzato per Render
-        render_memory_manager = RenderMemoryManager()
-        render_message_generator = RenderMessageGenerator()
-        
-        print(f"✅ [RENDER] Sistema ottimizzato caricato - RAM: {render_memory_manager.get_memory_usage_mb():.1f}MB")
-        
-    except ImportError as e:
-        print(f"⚠️ [RENDER] Errore caricamento ottimizzazioni Render: {e}")
-        RENDER_MODE = False
-else:
-    print("🖥️ [LOCAL] Modalità sviluppo locale - Tutte le funzionalità attive")
-
 # === TWITTER/X.COM CONFIG ===
 # Configurazione mantenuta per preservare le chiavi API (funzionalità Twitter disabilitata)
 try:
@@ -2748,19 +2725,17 @@ def get_start_date(period):
     return periods.get(period, today - datetime.timedelta(days=2000))
 
 
-# === CACHING AVANZATO CIAO4 - SERVER OPTIMIZED ===
+# === CACHING AVANZATO CIAO4 ===
 try:
     # Usa la configurazione da performance_config se disponibile
-    # SERVER: Cache molto più aggressiva per ridurre API calls
     CACHE_CONFIG = {
-        "max_size": PERFORMANCE_CONFIG.get("cache_max_size", 100),  # Aumentato da 50 a 100 per server
-        "cache_duration_minutes": PERFORMANCE_CONFIG.get("cache_duration_minutes", 240)  # Aumentato da 60 a 240 min (4 ore) per server
+        "max_size": PERFORMANCE_CONFIG.get("cache_max_size", 50),  # Aumentato da 20 a 50
+        "cache_duration_minutes": PERFORMANCE_CONFIG.get("cache_duration_minutes", 60)  # Aumentato da 30 a 60 min
     }
 except:
-    # Fallback con cache molto aggressiva per server
     CACHE_CONFIG = {
-        "max_size": 100,  # Doppia dimensione cache rispetto al locale
-        "cache_duration_minutes": 240  # 4 ore di cache invece di 1
+        "max_size": 50,
+        "cache_duration_minutes": 60
     }
 
 # Multi-layer cache: LRU + Time-based + Persistent
@@ -3916,91 +3891,54 @@ def update_all(selected_horizon, summary_open, models_open, detailed_open, compa
     fixed_time = "16:30:00"
     today_str = datetime.datetime.now().strftime("%Y-%m-%d")
 
-    # Usa ottimizzazioni Render se disponibili
-    if RENDER_MODE:
-        try:
-            print("🚀 [RENDER] Usando sistema ottimizzato per ML predictions...")
-            # Usa i modelli ottimizzati per Render
-            render_ml_processor = RenderMLProcessor()
-            render_results = render_ml_processor.process_all_assets_light(selected_horizon)
-            
-            for result in render_results:
+    for model_name, (model_inst, desc) in models.items():
+        model_signals = []
+        for asset_name, code in full_symbols.items():
+            try:
+                # Gestione corretta per crypto e FRED
+                if asset_name == "Bitcoin" or asset_name == "Gold (PAXG)":
+                    df_i = load_crypto_data(code)
+                else:
+                    df_i = load_data_fred(code, start, end)
+                if df_i.empty:
+                    print(f"Dati vuoti per {asset_name}, salto.")
+                    continue
+                df_i = add_features(df_i, selected_horizon)
+                prob, acc = train_model(model_inst, df_i)
+                # Sistema a 5 livelli standardizzato
+                if prob >= 0.75:
+                    signal = "BUY"
+                elif prob <= 0.25:
+                    signal = "SELL"
+                elif prob >= 0.6:
+                    signal = "WEAK BUY"
+                elif prob <= 0.4:
+                    signal = "WEAK SELL"
+                else:
+                    signal = "HOLD"
+
+                data_str = f"{today_str} {fixed_time}"
+
                 all_results.append({
-                    "Modello": result["model"], "Asset": result["asset"],
-                    "Probabilità": result["probability"], "Accuratezza": result["accuracy"],
+                    "Modello": model_name, "Asset": asset_name,
+                    "Probabilità": round(prob * 100, 2), "Accuratezza": round(acc * 100, 2),
                     "Orizzonte": label,
-                    "Data": f"{today_str} {fixed_time}"
+                    "Data": data_str
                 })
                 all_signals.append({
-                    "Modello": result["model"], "Asset": result["asset"],
-                    "Segnale": result["signal"],
-                    "Probabilità (%)": result["probability"]
+                    "Modello": model_name, "Asset": asset_name,
+                    "Segnale": signal,
+                    "Probabilità (%)": round(prob * 100, 2)
                 })
-                
-                if result["model"] not in signals_per_model:
-                    signals_per_model[result["model"]] = []
-                signals_per_model[result["model"]].append({
-                    "Asset": result["asset"],
-                    "Segnale": result["signal"],
-                    "Probabilità (%)": result["probability"]
+                model_signals.append({
+                    "Asset": asset_name,
+                    "Segnale": signal,
+                    "Probabilità (%)": round(prob * 100, 2)
                 })
-            
-            print(f"✅ [RENDER] ML processing completato: {len(render_results)} risultati")
-            
-        except Exception as e:
-            print(f"❌ [RENDER] Errore nel sistema ottimizzato, fallback al sistema standard: {e}")
-            RENDER_MODE = False  # Fallback temporaneo
-    
-    if not RENDER_MODE:
-        # Sistema standard per sviluppo locale
-        for model_name, (model_inst, desc) in models.items():
-            model_signals = []
-            for asset_name, code in full_symbols.items():
-                try:
-                    # Gestione corretta per crypto e FRED
-                    if asset_name == "Bitcoin" or asset_name == "Gold (PAXG)":
-                        df_i = load_crypto_data(code)
-                    else:
-                        df_i = load_data_fred(code, start, end)
-                    if df_i.empty:
-                        print(f"Dati vuoti per {asset_name}, salto.")
-                        continue
-                    df_i = add_features(df_i, selected_horizon)
-                    prob, acc = train_model(model_inst, df_i)
-                    # Sistema a 5 livelli standardizzato
-                    if prob >= 0.75:
-                        signal = "BUY"
-                    elif prob <= 0.25:
-                        signal = "SELL"
-                    elif prob >= 0.6:
-                        signal = "WEAK BUY"
-                    elif prob <= 0.4:
-                        signal = "WEAK SELL"
-                    else:
-                        signal = "HOLD"
-
-                    data_str = f"{today_str} {fixed_time}"
-
-                    all_results.append({
-                        "Modello": model_name, "Asset": asset_name,
-                        "Probabilità": round(prob * 100, 2), "Accuratezza": round(acc * 100, 2),
-                        "Orizzonte": label,
-                        "Data": data_str
-                    })
-                    all_signals.append({
-                        "Modello": model_name, "Asset": asset_name,
-                        "Segnale": signal,
-                        "Probabilità (%)": round(prob * 100, 2)
-                    })
-                    model_signals.append({
-                        "Asset": asset_name,
-                        "Segnale": signal,
-                        "Probabilità (%)": round(prob * 100, 2)
-                    })
-                except Exception as e:
-                    print(f"Errore con {model_name} su {asset_name}: {e}")
-                    continue
-            signals_per_model[model_name] = model_signals
+            except Exception as e:
+                print(f"Errore con {model_name} su {asset_name}: {e}")
+                continue
+        signals_per_model[model_name] = model_signals
 
     df_summary = pd.DataFrame(all_results)
     df_signals = pd.DataFrame(all_signals)
@@ -4434,9 +4372,6 @@ from dash import no_update
 def send_backtest_manual(n_clicks):
     """Esegue 555bt.py per generare l'analisi e invia il backtest con override temporaneo"""
     if n_clicks:
-        # ATTIVA IL KEEP-ALIVE per 10 minuti
-        trigger_manual_keep_alive()
-        
         # Usa override temporaneo per garantire l'invio anche se la funzione è disabilitata
         def _send_backtest():
             try:
@@ -4563,50 +4498,56 @@ def send_backtest_manual(n_clicks):
                     if analysis_content:
                         print(f"📊 [BACKTEST] Contenuto analysis_text.txt: {len(analysis_content)} caratteri")
                         print(f"📊 [BACKTEST] Prime 200 caratteri: {analysis_content[:200]}...")
-                    else:
-                        print("⚠️ [BACKTEST] File analysis_text.txt vuoto, generazione fallback...")
-                        analysis_content = generate_fallback_backtest_analysis(now)
-                else:
-                    print("⚠️ [BACKTEST] File analysis_text.txt non trovato, generazione fallback...")
-                    analysis_content = generate_fallback_backtest_analysis(now)
-                
-                # Verifica se è lunedì e aggiungi il riassunto settimanale
-                if now.weekday() == 0:  # 0 = Lunedì
-                    print(f"📅 [BACKTEST] È lunedì - aggiunta del riassunto settimanale")
-                    try:
-                        weekly_summary = generate_weekly_backtest_summary()
-                        analysis_content += f"\n\n{weekly_summary}"
-                        print(f"✅ [BACKTEST] Riassunto settimanale aggiunto ({len(weekly_summary)} caratteri)")
-                    except Exception as e:
-                        print(f"⚠️ [BACKTEST] Errore nel generare riassunto settimanale: {e}")
-                        analysis_content += "\n\n📈 === RIASSUNTO SETTIMANALE ===\n❌ Errore nella generazione del riassunto settimanale"
-                
-                # Prepara il messaggio con header - gestione migliorata
-                backtest_message = f"📊 *BACKTEST MANUALE - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{analysis_content}"
-                
-                # Gestione intelligente della lunghezza messaggio
-                if len(backtest_message) > 4000:
-                    print(f"⚠️ [BACKTEST] Messaggio troppo lungo ({len(backtest_message)} caratteri), suddivisione...")
-                    
-                    # Dividi in più messaggi se necessario
-                    header = f"📊 *BACKTEST MANUALE - {now.strftime('%d/%m/%Y %H:%M')}*\n\n"
-                    content_chunks = [analysis_content[i:i+3500] for i in range(0, len(analysis_content), 3500)]
-                    
-                    for i, chunk in enumerate(content_chunks):
-                        if i == 0:
-                            message = header + chunk
+                        
+                        # Verifica se è lunedì e aggiungi il riassunto settimanale
+                        if now.weekday() == 0:  # 0 = Lunedì
+                            print(f"📅 [BACKTEST] È lunedì - aggiunta del riassunto settimanale")
+                            try:
+                                weekly_summary = generate_weekly_backtest_summary()
+                                analysis_content += f"\n\n{weekly_summary}"
+                                print(f"✅ [BACKTEST] Riassunto settimanale aggiunto ({len(weekly_summary)} caratteri)")
+                            except Exception as e:
+                                print(f"⚠️ [BACKTEST] Errore nel generare riassunto settimanale: {e}")
+                                analysis_content += "\n\n📈 === RIASSUNTO SETTIMANALE ===\n❌ Errore nella generazione del riassunto settimanale"
+                        
+                        # Prepara il messaggio con header - gestione migliorata
+                        backtest_message = f"📊 *BACKTEST MANUALE - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{analysis_content}"
+                        
+                        # Gestione intelligente della lunghezza messaggio
+                        if len(backtest_message) > 4000:
+                            print(f"⚠️ [BACKTEST] Messaggio troppo lungo ({len(backtest_message)} caratteri), suddivisione...")
+                            
+                            # Dividi in più messaggi se necessario
+                            header = f"📊 *BACKTEST MANUALE - {now.strftime('%d/%m/%Y %H:%M')}*\n\n"
+                            content_chunks = [analysis_content[i:i+3500] for i in range(0, len(analysis_content), 3500)]
+                            
+                            for i, chunk in enumerate(content_chunks):
+                                if i == 0:
+                                    message = header + chunk
+                                else:
+                                    message = f"📊 *BACKTEST (parte {i+1})*\n\n{chunk}"
+                                
+                                # Rimuovi link Telegram per messaggio più pulito
+                                # message += "\n\n💬 t.me/+DXd9cQfxRchmZmE0"
+                                
+                                invia_messaggio_telegram(message)
+                                print(f"✅ [BACKTEST] Parte {i+1}/{len(content_chunks)} inviata ({len(message)} caratteri)")
+                                
+                                if i < len(content_chunks) - 1:  # Pausa tra i messaggi tranne l'ultimo
+                                    time.sleep(2)
                         else:
-                            message = f"📊 *BACKTEST (parte {i+1})*\n\n{chunk}"
-                        
-                        send_with_temporary_override("backtest_reports", invia_messaggio_telegram, message)
-                        print(f"✅ [BACKTEST] Parte {i+1}/{len(content_chunks)} inviata ({len(message)} caratteri)")
-                        
-                        if i < len(content_chunks) - 1:  # Pausa tra i messaggi tranne l'ultimo
-                            time.sleep(2)
+                            # Messaggio singolo senza footer per pulizia
+                            # backtest_message += "\n\n💬 t.me/+DXd9cQfxRchmZmE0"
+                            send_with_temporary_override("backtest_reports", invia_messaggio_telegram, backtest_message)
+                            print(f"✅ [BACKTEST] Backtest inviato con successo ({len(backtest_message)} caratteri)")
+                    else:
+                        error_message = f"⚠️ *BACKTEST - {now.strftime('%d/%m/%Y %H:%M')}*\n\nIl file analysis_text.txt è vuoto."
+                        invia_messaggio_telegram(error_message)
+                        print("⚠️ [BACKTEST] File analysis_text.txt è vuoto")
                 else:
-                    # Messaggio singolo
-                    send_with_temporary_override("backtest_reports", invia_messaggio_telegram, backtest_message)
-                    print(f"✅ [BACKTEST] Backtest inviato con successo ({len(backtest_message)} caratteri)")
+                    error_message = f"❌ *BACKTEST - {now.strftime('%d/%m/%Y %H:%M')}*\n\nFile analysis_text.txt non trovato."
+                    invia_messaggio_telegram(error_message)
+                    print("❌ [BACKTEST] File analysis_text.txt non trovato")
                 
                 # === FASE 4: SPEGNIMENTO DEL PROGRAMMA DI BACKTEST E INDICATORI ===
                 print("🔧 [BACKTEST] Spegnimento del programma di backtest e indicatori...")
@@ -4662,10 +4603,6 @@ def send_unified_report_manual(n_clicks):
     if n_clicks:
         try:
             print("🚀 [MANUAL] Richiesta di invio manuale ricevuta. Chiamo la funzione unificata...")
-            
-            # ATTIVA IL KEEP-ALIVE per 10 minuti
-            trigger_manual_keep_alive()
-            
             # Chiama la funzione unificata per generare e inviare il rapporto manuale
             generate_unified_report(report_type="manual")
         except Exception as e:
@@ -4681,9 +4618,6 @@ def send_unified_report_manual(n_clicks):
 def send_morning_briefing_manual(n_clicks):
     """Callback per inviare la rassegna stampa mattutina manualmente."""
     if n_clicks:
-        # ATTIVA IL KEEP-ALIVE per 10 minuti
-        trigger_manual_keep_alive()
-        
         try:
             print("🌅 [MANUAL] Richiesta di invio manuale rassegna stampa ricevuta...")
             # Usa override temporaneo per garantire l'invio anche se la funzione è disabilitata
@@ -4704,13 +4638,20 @@ def send_morning_briefing_manual(n_clicks):
     return no_update
 
 def generate_unified_report(report_type="manual", now=None):
-    """Funzione unificata per generare rapporti completi sia manuali che programmati"""
+    """Funzione unificata per generare rapporti completi sia manuali, programmati che giornalieri"""
     if now is None:
         import pytz
         italy_tz = pytz.timezone('Europe/Rome')
         now = datetime.datetime.now(italy_tz)
     
-    print(f'🚀 [{report_type.upper()}] Inizio generazione rapporto unificato alle {now.strftime('%H:%M:%S')}')
+    # Determina il tipo di report per i log
+    report_label = {
+        "manual": "MANUALE",
+        "scheduled": "PROGRAMMATO", 
+        "daily_snapshot": "GIORNALIERO"
+    }.get(report_type, report_type.upper())
+    
+    print(f'🚀 [{report_label}] Inizio generazione rapporto alle {now.strftime('%H:%M:%S')}')
     
     # === SALVA STATO ORIGINALE E ATTIVA TUTTI GLI INDICATORI/SEGNALI ML ===
     original_features_state = {}
@@ -4822,94 +4763,108 @@ def generate_unified_report(report_type="manual", now=None):
         
         # === SEZIONE 1: INDICATORI TECNICI ===
         try:
-            print("📈 [UNIFIED] Caricamento indicatori tecnici...")
+            print(f"📈 [{report_label}] Caricamento indicatori tecnici...")
             df_indicators = get_all_signals_summary('1d')  # Timeframe giornaliero
             if not df_indicators.empty:
-                # SEMPRE VERSIONE COMPLETA - TUTTI I 17 INDICATORI (sia manuale che programmato)
-                indicator_lines = ["📈 *INDICATORI TECNICI COMPLETI (17 INDICATORI)*"]
-                indicator_lines.append("```")
-                indicator_lines.append("")
-                
-                # TABELLA 1: Indicatori principali (5)
-                indicator_lines.append("📊 INDICATORI PRINCIPALI:")
-                indicator_lines.append("Asset     |MAC|RSI|MCD|BOL|EMA| Consensus")
-                indicator_lines.append("─" * 42)
-                
-                for _, row in df_indicators.iterrows():
-                    # Emoji per indicatori principali
-                    mac = "🟢" if row.get('MAC') == 'Buy' else "🔴" if row.get('MAC') == 'Sell' else "⚪"
-                    rsi = "🟢" if row.get('RSI') == 'Buy' else "🔴" if row.get('RSI') == 'Sell' else "⚪"
-                    macd = "🟢" if row.get('MACD') == 'Buy' else "🔴" if row.get('MACD') == 'Sell' else "⚪"
-                    bol = "🟢" if row.get('Bollinger') == 'Buy' else "🔴" if row.get('Bollinger') == 'Sell' else "⚪"
-                    ema = "🟢" if row.get('EMA') == 'Buy' else "🔴" if row.get('EMA') == 'Sell' else "⚪"
+                if report_type in ["manual", "daily_snapshot"]:
+                    # Versione TABELLA COMPLETA per manuale e giornaliero - TUTTI I 17 INDICATORI
+                    indicator_lines = ["📈 *INDICATORI TECNICI COMPLETI (17 INDICATORI)*"]
+                    indicator_lines.append("```")
+                    indicator_lines.append("")
                     
-                    # Calcola consenso su TUTTI i 17 indicatori disponibili
-                    all_indicators = ['MAC', 'RSI', 'MACD', 'Bollinger', 'EMA', 'SMA', 'Stochastic', 'ATR', 'CCI', 'Momentum', 'ROC', 'ADX', 'OBV', 'Ichimoku', 'ParabolicSAR', 'PivotPoints']
-                    available_indicators = [ind for ind in all_indicators if ind in row and row.get(ind) not in [None, 'N/A', '']]
-                    buy_count = sum(1 for ind in available_indicators if row.get(ind) == 'Buy')
-                    sell_count = sum(1 for ind in available_indicators if row.get(ind) == 'Sell')
+                    # TABELLA 1: Indicatori principali (5)
+                    indicator_lines.append("📊 INDICATORI PRINCIPALI:")
+                    indicator_lines.append("Asset     |MAC|RSI|MCD|BOL|EMA| Consensus")
+                    indicator_lines.append("─" * 42)
                     
-                    # Consenso basato sulla maggioranza degli indicatori disponibili
-                    total_signals = buy_count + sell_count
-                    if total_signals > 0:
-                        if buy_count > sell_count and buy_count >= max(3, len(available_indicators) // 3):
-                            consensus = f"🟢BUY({buy_count}/{len(available_indicators)})"
-                        elif sell_count > buy_count and sell_count >= max(3, len(available_indicators) // 3):
-                            consensus = f"🔴SELL({sell_count}/{len(available_indicators)})"
+                    for _, row in df_indicators.iterrows():
+                        # Emoji per indicatori principali
+                        mac = "🟢" if row.get('MAC') == 'Buy' else "🔴" if row.get('MAC') == 'Sell' else "⚪"
+                        rsi = "🟢" if row.get('RSI') == 'Buy' else "🔴" if row.get('RSI') == 'Sell' else "⚪"
+                        macd = "🟢" if row.get('MACD') == 'Buy' else "🔴" if row.get('MACD') == 'Sell' else "⚪"
+                        bol = "🟢" if row.get('Bollinger') == 'Buy' else "🔴" if row.get('Bollinger') == 'Sell' else "⚪"
+                        ema = "🟢" if row.get('EMA') == 'Buy' else "🔴" if row.get('EMA') == 'Sell' else "⚪"
+                        
+                        # Calcola consenso su TUTTI i 17 indicatori disponibili
+                        all_indicators = ['MAC', 'RSI', 'MACD', 'Bollinger', 'EMA', 'SMA', 'Stochastic', 'ATR', 'CCI', 'Momentum', 'ROC', 'ADX', 'OBV', 'Ichimoku', 'ParabolicSAR', 'PivotPoints']
+                        available_indicators = [ind for ind in all_indicators if ind in row and row.get(ind) not in [None, 'N/A', '']]
+                        buy_count = sum(1 for ind in available_indicators if row.get(ind) == 'Buy')
+                        sell_count = sum(1 for ind in available_indicators if row.get(ind) == 'Sell')
+                        
+                        # Consenso basato sulla maggioranza degli indicatori disponibili
+                        total_signals = buy_count + sell_count
+                        if total_signals > 0:
+                            if buy_count > sell_count and buy_count >= max(3, len(available_indicators) // 3):
+                                consensus = f"🟢BUY({buy_count}/{len(available_indicators)})"
+                            elif sell_count > buy_count and sell_count >= max(3, len(available_indicators) // 3):
+                                consensus = f"🔴SELL({sell_count}/{len(available_indicators)})"
+                            else:
+                                consensus = f"⚪HOLD({buy_count}B/{sell_count}S)"
                         else:
-                            consensus = f"⚪HOLD({buy_count}B/{sell_count}S)"
-                    else:
-                        consensus = "⚪HOLD(0/0)"
+                            consensus = "⚪HOLD(0/0)"
+                        
+                        asset_short = row['Asset'][:9] if len(row['Asset']) > 9 else row['Asset']
+                        indicator_lines.append(f"{asset_short:<9} | {mac} {rsi} {macd} {bol} {ema} | {consensus}")
                     
-                    asset_short = row['Asset'][:9] if len(row['Asset']) > 9 else row['Asset']
-                    indicator_lines.append(f"{asset_short:<9} | {mac} {rsi} {macd} {bol} {ema} | {consensus}")
-                
-                # TABELLA 2: Indicatori secondari (6)
-                indicator_lines.append("")
-                indicator_lines.append("📊 INDICATORI SECONDARI:")
-                indicator_lines.append("Asset     |SMA|STO|ATR|CCI|MOM|ROC")
-                indicator_lines.append("─" * 30)
-                
-                for _, row in df_indicators.iterrows():
-                    sma = "🟢" if row.get('SMA') == 'Buy' else "🔴" if row.get('SMA') == 'Sell' else "⚪"
-                    sto = "🟢" if row.get('Stochastic') == 'Buy' else "🔴" if row.get('Stochastic') == 'Sell' else "⚪"
-                    atr = "🟢" if row.get('ATR') == 'Buy' else "🔴" if row.get('ATR') == 'Sell' else "⚪"
-                    cci = "🟢" if row.get('CCI') == 'Buy' else "🔴" if row.get('CCI') == 'Sell' else "⚪"
-                    mom = "🟢" if row.get('Momentum') == 'Buy' else "🔴" if row.get('Momentum') == 'Sell' else "⚪"
-                    roc = "🟢" if row.get('ROC') == 'Buy' else "🔴" if row.get('ROC') == 'Sell' else "⚪"
+                    # TABELLA 2: Indicatori secondari (6)
+                    indicator_lines.append("")
+                    indicator_lines.append("📊 INDICATORI SECONDARI:")
+                    indicator_lines.append("Asset     |SMA|STO|ATR|CCI|MOM|ROC")
+                    indicator_lines.append("─" * 30)
                     
-                    asset_short = row['Asset'][:9] if len(row['Asset']) > 9 else row['Asset']
-                    indicator_lines.append(f"{asset_short:<9} | {sma} {sto} {atr} {cci} {mom} {roc}")
-                
-                # TABELLA 3: Indicatori avanzati (6)
-                indicator_lines.append("")
-                indicator_lines.append("📊 INDICATORI AVANZATI:")
-                indicator_lines.append("Asset     |ADX|OBV|ICH|SAR|PIV")
-                indicator_lines.append("─" * 27)
-                
-                for _, row in df_indicators.iterrows():
-                    adx = "🟢" if row.get('ADX') == 'Buy' else "🔴" if row.get('ADX') == 'Sell' else "⚪"
-                    obv = "🟢" if row.get('OBV') == 'Buy' else "🔴" if row.get('OBV') == 'Sell' else "⚪"
-                    ich = "🟢" if row.get('Ichimoku') == 'Buy' else "🔴" if row.get('Ichimoku') == 'Sell' else "⚪"
-                    sar = "🟢" if row.get('ParabolicSAR') == 'Buy' else "🔴" if row.get('ParabolicSAR') == 'Sell' else "⚪"
-                    piv = "🟢" if row.get('PivotPoints') == 'Buy' else "🔴" if row.get('PivotPoints') == 'Sell' else "⚪"
+                    for _, row in df_indicators.iterrows():
+                        sma = "🟢" if row.get('SMA') == 'Buy' else "🔴" if row.get('SMA') == 'Sell' else "⚪"
+                        sto = "🟢" if row.get('Stochastic') == 'Buy' else "🔴" if row.get('Stochastic') == 'Sell' else "⚪"
+                        atr = "🟢" if row.get('ATR') == 'Buy' else "🔴" if row.get('ATR') == 'Sell' else "⚪"
+                        cci = "🟢" if row.get('CCI') == 'Buy' else "🔴" if row.get('CCI') == 'Sell' else "⚪"
+                        mom = "🟢" if row.get('Momentum') == 'Buy' else "🔴" if row.get('Momentum') == 'Sell' else "⚪"
+                        roc = "🟢" if row.get('ROC') == 'Buy' else "🔴" if row.get('ROC') == 'Sell' else "⚪"
+                        
+                        asset_short = row['Asset'][:9] if len(row['Asset']) > 9 else row['Asset']
+                        indicator_lines.append(f"{asset_short:<9} | {sma} {sto} {atr} {cci} {mom} {roc}")
                     
-                    asset_short = row['Asset'][:9] if len(row['Asset']) > 9 else row['Asset']
-                    indicator_lines.append(f"{asset_short:<9} | {adx} {obv} {ich} {sar} {piv}")
-                
-                indicator_lines.append("```")
-                unified_message_parts.append("\n".join(indicator_lines))
+                    # TABELLA 3: Indicatori avanzati (6)
+                    indicator_lines.append("")
+                    indicator_lines.append("📊 INDICATORI AVANZATI:")
+                    indicator_lines.append("Asset     |ADX|OBV|ICH|SAR|PIV")
+                    indicator_lines.append("─" * 27)
+                    
+                    for _, row in df_indicators.iterrows():
+                        adx = "🟢" if row.get('ADX') == 'Buy' else "🔴" if row.get('ADX') == 'Sell' else "⚪"
+                        obv = "🟢" if row.get('OBV') == 'Buy' else "🔴" if row.get('OBV') == 'Sell' else "⚪"
+                        ich = "🟢" if row.get('Ichimoku') == 'Buy' else "🔴" if row.get('Ichimoku') == 'Sell' else "⚪"
+                        sar = "🟢" if row.get('ParabolicSAR') == 'Buy' else "🔴" if row.get('ParabolicSAR') == 'Sell' else "⚪"
+                        piv = "🟢" if row.get('PivotPoints') == 'Buy' else "🔴" if row.get('PivotPoints') == 'Sell' else "⚪"
+                        
+                        asset_short = row['Asset'][:9] if len(row['Asset']) > 9 else row['Asset']
+                        indicator_lines.append(f"{asset_short:<9} | {adx} {obv} {ich} {sar} {piv}")
+                    
+                    indicator_lines.append("```")
+                    unified_message_parts.append("\n".join(indicator_lines))
+                elif report_type == "scheduled":
+                    # Versione ottimizzata per scheduled
+                    indicator_lines = ["📈 *INDICATORI TECNICI*"]
+                    for _, row in df_indicators.iterrows()[:4]:  # Primi 4 asset per report ottimizzato
+                        # Solo MAC, RSI, MACD per report schedulato
+                        mac = "🟢" if row.get('MAC') == 'Buy' else "🔴" if row.get('MAC') == 'Sell' else "⚪"
+                        rsi = "🟢" if row.get('RSI') == 'Buy' else "🔴" if row.get('RSI') == 'Sell' else "⚪"
+                        macd = "🟢" if row.get('MACD') == 'Buy' else "🔴" if row.get('MACD') == 'Sell' else "⚪"
+                        
+                        asset_name = row['Asset'][:10] + ".." if len(row['Asset']) > 12 else row['Asset']
+                        indicator_lines.append(f"*{asset_name}*: MAC{mac} RSI{rsi} MACD{macd}")
+                    
+                    unified_message_parts.append("\n".join(indicator_lines))
                 
                 print("✅ [UNIFIED] Sezione Indicatori preparata")
             else:
                 unified_message_parts.append("📈 *INDICATORI TECNICI*\n⚠️ Nessun dato disponibile")
         except Exception as e:
-            print(f"❌ [UNIFIED] Errore preparazione indicatori: {e}")
+            print(f"❌ [{report_label}] Errore preparazione indicatori: {e}")
             unified_message_parts.append("📈 *INDICATORI TECNICI*\n❌ Errore nel caricamento")
         
         # === SEZIONE 2: SEGNALI ML ===
         try:
-            print("🤖 [UNIFIED] Caricamento modelli ML...")
+            print(f"🤖 [{report_label}] Caricamento modelli ML...")
             full_symbols = {**symbols, **crypto_symbols}
             
             # Rimuovi duplicati Gold se presenti (non dovrebbe più servire con la definizione corretta)
@@ -4924,102 +4879,147 @@ def generate_unified_report(report_type="manual", now=None):
             all_models = [name for name, (model_inst, desc) in models.items() if not isinstance(model_inst, str) or "_PLACEHOLDER" not in model_inst]
             print(f"🤖 [UNIFIED] Modelli ML disponibili: {len(all_models)} - {all_models}")
             
-            # SEMPRE VERSIONE COMPLETA - TUTTI I MODELLI ML (sia manuale che programmato)
-            ml_lines.append("```")
-            ml_lines.append(f"🤖 MODELLI ML ATTIVI: {len(all_models)}")
-            ml_lines.append("")
-            
-            # Prepara i dati per la tabella
-            ml_results_table = {}
-            
-            for model_name in all_models[:8]:  # Primi 8 modelli per leggibilità
-                if model_name in models:
-                    model_inst = models[model_name][0]
-                    
-                    for asset_name, code in full_symbols.items():
-                        try:
-                            # Gestione corretta per crypto e FRED
-                            if asset_name == "Bitcoin" or asset_name == "Gold (PAXG)":
-                                df_i = load_crypto_data(code)
-                            else:
-                                df_i = load_data_fred(code, start, end)
-                            if df_i.empty:
+            if report_type in ["manual", "daily_snapshot"]:
+                # Versione TABELLA COMPLETA per manuale e giornaliero - TUTTI I MODELLI ML
+                ml_lines.append("```")
+                ml_lines.append(f"🤖 MODELLI ML ATTIVI: {len(all_models)}")
+                ml_lines.append("")
+                
+                # Prepara i dati per la tabella
+                ml_results_table = {}
+                
+                for model_name in all_models[:8]:  # Primi 8 modelli per leggibilità
+                    if model_name in models:
+                        model_inst = models[model_name][0]
+                        
+                        for asset_name, code in full_symbols.items():
+                            try:
+                                # Gestione corretta per crypto e FRED
+                                if asset_name == "Bitcoin" or asset_name == "Gold (PAXG)":
+                                    df_i = load_crypto_data(code)
+                                else:
+                                    df_i = load_data_fred(code, start, end)
+                                if df_i.empty:
+                                    continue
+                                df_i = add_features(df_i, EXPORT_CONFIG["backtest_interval"])
+                                prob, _ = train_model(model_inst, df_i)
+                                
+                                # Sistema a 5 livelli standardizzato
+                                if prob >= 0.75:
+                                    signal = "BUY"
+                                    signal_emoji = "🟢"
+                                elif prob <= 0.25:
+                                    signal = "SELL"
+                                    signal_emoji = "🔴"
+                                elif prob >= 0.6:
+                                    signal = "WEAK BUY"
+                                    signal_emoji = "🟡"
+                                elif prob <= 0.4:
+                                    signal = "WEAK SELL"
+                                    signal_emoji = "🟠"
+                                else:
+                                    signal = "HOLD"
+                                    signal_emoji = "⚪"
+                                
+                                # Salva per tabella
+                                if asset_name not in ml_results_table:
+                                    ml_results_table[asset_name] = {}
+                                ml_results_table[asset_name][model_name] = f"{signal_emoji}{round(prob*100)}"
+                                
+                                # Salva per confronto
+                                if asset_name not in ml_signals_for_comparison:
+                                    ml_signals_for_comparison[asset_name] = {}
+                                ml_signals_for_comparison[asset_name][model_name] = signal
+                                
+                            except Exception as e:
+                                print(f"Errore ML {model_name}-{asset_name}: {e}")
+                                if asset_name not in ml_results_table:
+                                    ml_results_table[asset_name] = {}
+                                ml_results_table[asset_name][model_name] = "❌"
                                 continue
-                            df_i = add_features(df_i, EXPORT_CONFIG["backtest_interval"])
-                            prob, _ = train_model(model_inst, df_i)
-                            
-                            # Sistema a 5 livelli standardizzato
-                            if prob >= 0.75:
-                                signal = "BUY"
-                                signal_emoji = "🟢"
-                            elif prob <= 0.25:
-                                signal = "SELL"
-                                signal_emoji = "🔴"
-                            elif prob >= 0.6:
-                                signal = "WEAK BUY"
-                                signal_emoji = "🟡"
-                            elif prob <= 0.4:
-                                signal = "WEAK SELL"
-                                signal_emoji = "🟠"
-                            else:
-                                signal = "HOLD"
-                                signal_emoji = "⚪"
-                            
-                            # Salva per tabella
-                            if asset_name not in ml_results_table:
-                                ml_results_table[asset_name] = {}
-                            ml_results_table[asset_name][model_name] = f"{signal_emoji}{round(prob*100)}"
-                            
-                            # Salva per confronto
-                            if asset_name not in ml_signals_for_comparison:
-                                ml_signals_for_comparison[asset_name] = {}
-                            ml_signals_for_comparison[asset_name][model_name] = signal
-                            
-                        except Exception as e:
-                            print(f"Errore ML {model_name}-{asset_name}: {e}")
-                            if asset_name not in ml_results_table:
-                                ml_results_table[asset_name] = {}
-                            ml_results_table[asset_name][model_name] = "❌"
-                            continue
-            
-            # Costruisci tabella ML compatta
-            if ml_results_table:
-                # Header della tabella
-                models_short = [name[:3].upper() for name in all_models[:8]]  # Primi 8 modelli
-                header = "Asset     |" + "|".join(f"{m:>4}" for m in models_short)
-                ml_lines.append(header)
-                ml_lines.append("─" * len(header))
                 
-                # Righe della tabella
-                for asset_name, model_results in ml_results_table.items():
-                    asset_short = asset_name[:9] if len(asset_name) > 9 else asset_name
-                    row = f"{asset_short:<9} |"
+                # Costruisci tabella ML compatta
+                if ml_results_table:
+                    # Header della tabella
+                    models_short = [name[:3].upper() for name in all_models[:8]]  # Primi 8 modelli
+                    header = "Asset     |" + "|".join(f"{m:>4}" for m in models_short)
+                    ml_lines.append(header)
+                    ml_lines.append("─" * len(header))
                     
-                    for model_name in all_models[:8]:
-                        result = model_results.get(model_name, "⚪-")
-                        row += f"{result:>4}|"
+                    # Righe della tabella
+                    for asset_name, model_results in ml_results_table.items():
+                        asset_short = asset_name[:9] if len(asset_name) > 9 else asset_name
+                        row = f"{asset_short:<9} |"
+                        
+                        for model_name in all_models[:8]:
+                            result = model_results.get(model_name, "⚪-")
+                            row += f"{result:>4}|"
+                        
+                        ml_lines.append(row)
                     
-                    ml_lines.append(row)
+                    # Se ci sono altri modelli, mostra il conteggio
+                    if len(all_models) > 8:
+                        ml_lines.append("")
+                        ml_lines.append(f"+ Altri {len(all_models)-8} modelli attivi")
+                        remaining_models = all_models[8:]
+                        ml_lines.append(f"({', '.join(remaining_models[:5])}{'...' if len(remaining_models) > 5 else ''})")
                 
-                # Se ci sono altri modelli, mostra il conteggio
-                if len(all_models) > 8:
-                    ml_lines.append("")
-                    ml_lines.append(f"+ Altri {len(all_models)-8} modelli attivi")
-                    remaining_models = all_models[8:]
-                    ml_lines.append(f"({', '.join(remaining_models[:5])}{'...' if len(remaining_models) > 5 else ''})")
-            
-            ml_lines.append("```")
+                ml_lines.append("```")
+            else:
+                # Versione ottimizzata per scheduled
+                ml_lines.append("")
+                
+                # Tabella compatta per scheduled
+                for asset_name, code in list(full_symbols.items())[:4]:  # Primi 4 asset
+                    asset_signals = []
+                    ml_signals_for_comparison[asset_name] = {}
+                    
+                    for model_name in all_models:
+                        if model_name in models:
+                            try:
+                                model_inst = models[model_name][0]
+                                # Gestione corretta per crypto e FRED
+                                if asset_name == "Bitcoin" or asset_name == "Gold (PAXG)":
+                                    df_i = load_crypto_data(code)
+                                else:
+                                    df_i = load_data_fred(code, start, end)
+                                if df_i.empty:
+                                    continue
+                                df_i = add_features(df_i, EXPORT_CONFIG["backtest_interval"])
+                                prob, _ = train_model(model_inst, df_i)
+                                
+                                # Segnali compatti con emoji
+                                if prob >= 0.75:
+                                    signal = "BUY"
+                                    emoji = "🟢"
+                                elif prob <= 0.25:
+                                    signal = "SELL"
+                                    emoji = "🔴"
+                                else:
+                                    signal = "HOLD"
+                                    emoji = "⚪"
+                                
+                                asset_signals.append(f"{model_name[:2]}{emoji}")
+                                ml_signals_for_comparison[asset_name][model_name] = signal
+                                
+                            except:
+                                asset_signals.append("⚪-")
+                                continue
+                    
+                    if asset_signals:
+                        asset_short = asset_name[:8] + ".." if len(asset_name) > 10 else asset_name
+                        ml_lines.append(f"*{asset_short}*: {' '.join(asset_signals)}")
             
             unified_message_parts.append("\n".join(ml_lines))
-            print("✅ [UNIFIED] Sezione ML preparata")
+            print(f"✅ [{report_label}] Sezione ML preparata")
             
         except Exception as e:
-            print(f"❌ [UNIFIED] Errore preparazione ML: {e}")
+            print(f"❌ [{report_label}] Errore preparazione ML: {e}")
             unified_message_parts.append("\n\n🤖 *SEGNALI ML*\n❌ Errore nel caricamento")
             
         # === SEZIONE 2.5: CONFRONTO INDICATORI VS ML ===
         try:
-            print("⚖️ [UNIFIED] Generazione confronto Indicatori vs ML...")
+            print(f"⚖️ [{report_label}] Generazione confronto Indicatori vs ML...")
             
             # Crea tabella di confronto
             comparison_data = []
@@ -5111,10 +5111,10 @@ def generate_unified_report(report_type="manual", now=None):
                 comparison_lines.append(f"📊 Statistiche: {accordi}/4 accordi")
                 
                 unified_message_parts.append("\n".join(comparison_lines))
-                print("✅ [UNIFIED] Sezione Confronto preparata")
+                print(f"✅ [{report_label}] Sezione Confronto preparata")
                 
         except Exception as e:
-            print(f"❌ [UNIFIED] Errore preparazione confronto: {e}")
+            print(f"❌ [{report_label}] Errore preparazione confronto: {e}")
             unified_message_parts.append("\n\n⚖️ *CONFRONTO*\n❌ Errore nel calcolo")
         
         # === SEZIONE 3: CALENDARIO EVENTI ===
@@ -5237,7 +5237,7 @@ def generate_unified_report(report_type="manual", now=None):
         
         # === INVIO IN 4 MESSAGGI SEPARATI ===
         if unified_message_parts and len(unified_message_parts) >= 2:
-            print(f"📤 [UNIFIED] Invio rapporto diviso in 4 messaggi separati...")
+            print(f"📤 [{report_label}] Invio rapporto diviso in 4 messaggi separati...")
             
             # === MESSAGGIO 1: INDICATORI + SEGNALI ML + CONFRONTO ===
             msg_1_parts = []
@@ -5254,6 +5254,8 @@ def generate_unified_report(report_type="manual", now=None):
             msg1_content = "\n".join(msg_1_parts)
             if report_type == "manual":
                 msg1 = f"🚀 *INDICATORI + ML + CONFRONTO (1/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{msg1_content}"
+            elif report_type == "daily_snapshot":
+                msg1 = f"📸 *FOTO GIORNALIERA COMPLETA (1/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{msg1_content}"
             else:
                 msg1 = f"🚀 *INDICATORI E ML (1/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{msg1_content}"
             
@@ -5279,6 +5281,8 @@ def generate_unified_report(report_type="manual", now=None):
                 
                 if report_type == "manual":
                     msg2 = f"🚀 *NOTIZIE CRITICHE (2/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{msg2_content}"
+                elif report_type == "daily_snapshot":
+                    msg2 = f"📸 *NOTIZIE CRITICHE (2/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{msg2_content}"
                 else:
                     msg2 = f"🚀 *NOTIZIE CRITICHE (2/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{msg2_content}"
                     
@@ -5323,6 +5327,8 @@ def generate_unified_report(report_type="manual", now=None):
                 
                 if report_type == "manual":
                     msg3 = f"🚀 *ANALISI ML NOTIZIE (3/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{ml_news_content}"
+                elif report_type == "daily_snapshot":
+                    msg3 = f"📸 *ANALISI ML NOTIZIE (3/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{ml_news_content}"
                 else:
                     msg3 = f"🚀 *ANALISI ML NOTIZIE (3/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{ml_news_content}"
                     
@@ -5413,6 +5419,8 @@ def generate_unified_report(report_type="manual", now=None):
                 
                 if report_type == "manual":
                     msg4 = f"🚀 *CALENDARIO E ANALISI ML (4/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{final_content}"
+                elif report_type == "daily_snapshot":
+                    msg4 = f"📸 *CALENDARIO E ANALISI ML (4/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{final_content}"
                 else:
                     msg4 = f"🚀 *CALENDARIO E ANALISI ML (4/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{final_content}"
                     
@@ -5453,16 +5461,16 @@ def generate_unified_report(report_type="manual", now=None):
                     print(f"❌ [UNIFIED] Errore invio messaggio {i}/4 ({desc}): {e}")
             
             if success_count == 4:
-                print(f"✅ [UNIFIED] Tutti e 4 i messaggi inviati con successo")
+                print(f"✅ [{report_label}] Tutti e 4 i messaggi inviati con successo")
                 return True
             elif success_count > 0:
-                print(f"⚠️ [UNIFIED] {success_count}/4 messaggi inviati con successo")
+                print(f"⚠️ [{report_label}] {success_count}/4 messaggi inviati con successo")
                 return True
             else:
-                print(f"❌ [UNIFIED] Nessun messaggio inviato con successo")
+                print(f"❌ [{report_label}] Nessun messaggio inviato con successo")
                 return False
         
-        print(f"❌ [UNIFIED] Errore nell'invio del rapporto")
+        print(f"❌ [{report_label}] Errore nell'invio del rapporto")
         return False
         
     except Exception as e:
@@ -5564,126 +5572,6 @@ try:
 except ImportError as e:
     print(f"⚠️ [ADAPTIVE-SPLITTER] Moduli splitter non trovati: {e}")
     ADAPTIVE_SPLITTER_ENABLED = False
-
-def generate_fallback_backtest_analysis(now):
-    """Genera un'analisi di backtest fallback quando il file analysis_text.txt non è disponibile"""
-    try:
-        import pytz
-        if not hasattr(now, 'tzinfo') or now.tzinfo is None:
-            italy_tz = pytz.timezone('Europe/Rome')
-            now = datetime.datetime.now(italy_tz)
-        
-        fallback_lines = []
-        fallback_lines.append("📊 === ANALISI DI BACKTEST FALLBACK ===")
-        fallback_lines.append(f"⏰ Generata il {now.strftime('%d/%m/%Y alle %H:%M')} (CET)")
-        fallback_lines.append("")
-        fallback_lines.append("⚠️ **NOTA**: File analysis_text.txt non disponibile - usando dati fallback")
-        fallback_lines.append("")
-        
-        # Sezione indicatori di base
-        try:
-            df_indicators = get_all_signals_summary('1d')
-            if not df_indicators.empty:
-                fallback_lines.append("📈 **INDICATORI TECNICI PRINCIPALI**:")
-                
-                for _, row in df_indicators.iterrows():
-                    # Conta segnali positivi vs negativi
-                    main_indicators = ['MAC', 'RSI', 'MACD', 'Bollinger', 'EMA']
-                    buy_count = sum(1 for ind in main_indicators if row.get(ind) == 'Buy')
-                    sell_count = sum(1 for ind in main_indicators if row.get(ind) == 'Sell')
-                    hold_count = sum(1 for ind in main_indicators if row.get(ind) == 'Hold')
-                    
-                    if buy_count > sell_count:
-                        trend = "Trend: RIALZISTA 🟢"
-                    elif sell_count > buy_count:
-                        trend = "Trend: RIBASSISTA 🔴"
-                    else:
-                        trend = "Trend: NEUTRALE ⚪"
-                    
-                    fallback_lines.append(f"• **{row['Asset']}**: {trend} (Buy:{buy_count}, Sell:{sell_count}, Hold:{hold_count})")
-                
-                fallback_lines.append("")
-        except Exception as e:
-            fallback_lines.append("📈 **INDICATORI TECNICI**: Errore nel caricamento")
-            print(f"Errore indicatori fallback: {e}")
-        
-        # Sezione ML di base
-        try:
-            fallback_lines.append("🤖 **MODELLI MACHINE LEARNING**:")
-            
-            # Test rapido con Random Forest
-            full_symbols = {**symbols, "Bitcoin": "BTC"}
-            ml_summary = []
-            
-            if "Random Forest" in models:
-                model_inst = models["Random Forest"][0]
-                
-                for asset_name, code in list(full_symbols.items())[:3]:  # Primi 3 asset per fallback
-                    try:
-                        df_i = load_crypto_data(code) if asset_name == "Bitcoin" else load_data_fred(code, start, end)
-                        if df_i.empty:
-                            continue
-                        df_i = add_features(df_i, 5)
-                        prob, acc = train_model(model_inst, df_i)
-                        
-                        if prob >= 0.65:
-                            signal = "BUY 🟢"
-                        elif prob <= 0.35:
-                            signal = "SELL 🔴"
-                        else:
-                            signal = "HOLD ⚪"
-                        
-                        ml_summary.append(f"• **{asset_name}**: {signal} (Prob: {round(prob*100)}%, Acc: {round(acc*100)}%)")
-                        
-                    except Exception as e:
-                        ml_summary.append(f"• **{asset_name}**: Errore nel calcolo ML")
-                        print(f"Errore ML fallback {asset_name}: {e}")
-            
-            if ml_summary:
-                fallback_lines.extend(ml_summary)
-            else:
-                fallback_lines.append("• Nessun dato ML disponibile al momento")
-            
-            fallback_lines.append("")
-        except Exception as e:
-            fallback_lines.append("🤖 **MODELLI ML**: Errore nel caricamento")
-            print(f"Errore ML fallback: {e}")
-        
-        # Notizie principali
-        try:
-            fallback_lines.append("📰 **NOTIZIE PRINCIPALI OGGI**:")
-            notizie_oggi = get_notizie_critiche()
-            
-            if notizie_oggi:
-                for i, notizia in enumerate(notizie_oggi[:3], 1):  # Prime 3 notizie
-                    titolo_short = notizia["titolo"][:60] + "..." if len(notizia["titolo"]) > 60 else notizia["titolo"]
-                    fallback_lines.append(f"{i}. **{titolo_short}**")
-                    fallback_lines.append(f"   📂 {notizia['categoria']} | 📰 {notizia['fonte']}")
-            else:
-                fallback_lines.append("• Nessuna notizia critica rilevata nelle ultime 24 ore")
-            
-            fallback_lines.append("")
-        except Exception as e:
-            fallback_lines.append("📰 **NOTIZIE**: Errore nel caricamento")
-            print(f"Errore notizie fallback: {e}")
-        
-        # Raccomandazioni generiche
-        fallback_lines.append("💡 **RACCOMANDAZIONI GENERICHE**:")
-        fallback_lines.append("• Mantieni diversificazione del portafoglio")
-        fallback_lines.append("• Monitora volatilità sui mercati crypto")
-        fallback_lines.append("• Segui sviluppi banche centrali (FED/ECB)")
-        fallback_lines.append("• Position sizing prudente in ambiente incerto")
-        fallback_lines.append("")
-        
-        # Footer
-        fallback_lines.append("🔧 **NOTA TECNICA**: Analisi di emergenza generata automaticamente")
-        fallback_lines.append("Per analisi completa, eseguire nuovamente il backtest quando i dati sono disponibili.")
-        
-        return "\n".join(fallback_lines)
-        
-    except Exception as e:
-        print(f"❌ Errore nella generazione dell'analisi fallback: {e}")
-        return f"📊 **ANALISI FALLBACK ERROR**\n\n❌ Impossibile generare analisi di emergenza.\n⏰ {now.strftime('%d/%m/%Y %H:%M')}\n\nRiprovare l'operazione o controllare i log del sistema."
 
 def create_optimized_message(message_parts, report_type, now):
     """Crea una versione ottimizzata del messaggio"""
@@ -6046,28 +5934,11 @@ if __name__ == "__main__":
             print(f"❌ [KEEP-ALIVE] Failed to ping app: {e}")
             return False
 
-    def trigger_manual_keep_alive():
-        """Trigger manual keep-alive for 1 hour from now"""
-        import pytz
-        italy_tz = pytz.timezone('Europe/Rome')
-        now = datetime.datetime.now(italy_tz)
-        
-        # Set the last manual trigger timestamp
-        is_keep_alive_time.last_manual_trigger = now
-        print(f"🔄 [MANUAL-KEEPALIVE] Manual trigger activated at {now.strftime('%H:%M:%S')} (1 hour duration)")
-    
     def is_keep_alive_time():
-        """Check if current time is within scheduled events time windows OR if manual button was recently pressed"""
+        """Check if current time is within scheduled events time windows"""
         import pytz
         italy_tz = pytz.timezone('Europe/Rome')
         now = datetime.datetime.now(italy_tz)
-        
-        # Check if a manual button was pressed recently (last 10 minutes)
-        if hasattr(is_keep_alive_time, 'last_manual_trigger'):
-            time_since_manual = (now - is_keep_alive_time.last_manual_trigger).total_seconds()
-            if time_since_manual < 600:  # 10 minutes
-                print(f"🔄 [MANUAL-KEEPALIVE] Active due to recent manual trigger ({int(time_since_manual)}s ago)")
-                return True
         
         # List of scheduled event times with windows (start 10 min before, end 10 min after)
         scheduled_times = [
@@ -6095,7 +5966,7 @@ if __name__ == "__main__":
         
         return False
 
-    def schedule_telegram_reports():
+def schedule_telegram_reports():
         import pytz
         italy_tz = pytz.timezone('Europe/Rome')
         
@@ -6111,6 +5982,32 @@ if __name__ == "__main__":
             # Usa il fuso orario italiano
             now = datetime.datetime.now(italy_tz)
             print(f"🕐 Orario Italia: {now.strftime('%H:%M:%S')} - {now.strftime('%d/%m/%Y')}")
+            
+            # === CONTROLLO RECUPERO REPORT GIORNALIERO MANCATO ===
+            try:
+                # Controlla se oggi è già stato inviato il report giornaliero alle 13:00
+                today_report_file = os.path.join('salvataggi', f'daily_report_sent_{now.strftime("%Y%m%d")}.flag')
+                
+                # Se è dopo le 13:05 e non è stato ancora inviato, recupera
+                if now.hour >= 13 and now.minute >= 5 and not os.path.exists(today_report_file):
+                    print(f"🔄 [RECUPERO] Report giornaliero non inviato alle 13:00, recupero automatico...")
+                    try:
+                        # Genera report giornaliero completo (stessa funzione del server)
+                        success = generate_unified_report(report_type="daily_snapshot", now=now)
+                        
+                        if success:
+                            # Crea flag per evitare invii multipli
+                            with open(today_report_file, 'w') as f:
+                                f.write(f"Daily report sent at {now.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                            print(f"✅ [RECUPERO] Report giornaliero recuperato e inviato con successo")
+                        else:
+                            print(f"❌ [RECUPERO] Report giornaliero recupero fallito")
+                            
+                    except Exception as e:
+                        print(f"❌ [RECUPERO] Errore nel recupero report giornaliero: {e}")
+                        
+            except Exception as e:
+                print(f"❌ [RECUPERO] Errore controllo recupero: {e}")
             
             # INVIO REPORT SETTIMANALE SEPARATO ogni lunedì alle 13:05
             if now.weekday() == 0 and now.hour == 13 and now.minute == 5:  # Lunedì alle 13:05 ora italiana
@@ -6194,27 +6091,30 @@ if __name__ == "__main__":
                 
                 time.sleep(60)  # Pausa per evitare invii multipli nello stesso minuto
             
-            # INVIO REPORT UNIFICATO ALLE 13:00 OGNI GIORNO (ora italiana) - SOLO TELEGRAM
+            # INVIO REPORT GIORNALIERO COMPLETO ALLE 13:00 OGNI GIORNO (ora italiana)
             elif (now.hour == 13 and now.minute == 0):
                 if is_feature_enabled("scheduled_reports"):
                     try:
-                        print(f"⏰ [SCHEDULER] Trigger delle 13:00 rilevato - Avvio invio report unificato...")
+                        print(f"📸 [SCHEDULER] Trigger delle 13:00 - Report giornaliero completo locale...")
                         
-                        # UNICO MESSAGGIO: Report completo unificato
-                        print("📤 [SCHEDULER] Invio report completo unificato Telegram")
-                        success = generate_unified_report(report_type="manual", now=now)  # Usa "manual" per report completo
+                        # REPORT GIORNALIERO COMPLETO (stessa funzione del server ma da locale)
+                        success = generate_unified_report(report_type="daily_snapshot", now=now)
                         
                         if success:
-                            print("✅ [SCHEDULER] Report Telegram inviato con successo")
+                            # Crea flag per tracking
+                            today_report_file = os.path.join('salvataggi', f'daily_report_sent_{now.strftime("%Y%m%d")}.flag')
+                            with open(today_report_file, 'w') as f:
+                                f.write(f"Daily report sent at {now.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                            print("✅ [SCHEDULER] Report giornaliero completo inviato con successo")
                         else:
-                            print("❌ [SCHEDULER] Report Telegram fallito")
+                            print("❌ [SCHEDULER] Report giornaliero completo fallito")
                         
                     except Exception as e:
-                        print(f"❌ [SCHEDULER] Errore critico durante il report delle 13:00: {e}")
+                        print(f"❌ [SCHEDULER] Errore critico durante il report giornaliero delle 13:00: {e}")
                         import traceback
                         traceback.print_exc()
                 else:
-                    print(f"ℹ️ [SCHEDULER] Report delle 13:00 saltato - funzione scheduled_reports disabilitata")
+                    print(f"ℹ️ [SCHEDULER] Report giornaliero delle 13:00 saltato - scheduled_reports disabilitata")
                 
                 time.sleep(60)  # Pausa per evitare invii multipli nello stesso minuto
             
@@ -6268,16 +6168,51 @@ print("🚀 [THREADS] Both scheduler and smart keep-alive threads started")
 
 # Configurazione per deployment (Render-compatible)
 import os
-port = int(os.environ.get('PORT', 10000))  # 🚀 Render richiede porta 10000 di default
+port = int(os.environ.get('PORT', 8050))
 host = '0.0.0.0'
 
 # Avvia il server unificato
-print("🚀 Dashboard Finanziaria Unificata - Layout Verticale - SERVER VERSION")
+print("🚀 Dashboard Finanziaria Unificata - Layout Verticale")
 print(f"   🌍 Server running on {host}:{port}")
-print(f"   🏭 Configurato per Render.com deployment")
 
-# Browser opening disabled for server deployment
-# webbrowser.open("http://127.0.0.1:8050")
+# === MULTI-APP STARTUP ===
+if port == 8050:  # Solo se siamo su porta locale (non su Render)
+    print("🚀 [MULTI-APP] Avvio applicazioni multiple...")
+    
+    # 1. Apri Dashboard 555 (porta 8050)
+    print("📊 [555] Aprendo Dashboard principale su porta 8050...")
+    webbrowser.open("http://127.0.0.1:8050")
+    
+    # 2. Avvia e apri Wallet (porta 8051)
+    try:
+        import subprocess
+        import time
+        
+        # Avvia wallet.py su porta 8051 in background
+        wallet_process = subprocess.Popen(
+            ["python", "wallet.py", "--port", "8051"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        
+        # Aspetta un po' che il wallet si avvii
+        print("💰 [WALLET] Avvio wallet.py su porta 8051...")
+        time.sleep(3)
+        
+        # Apri wallet nel browser
+        print("💰 [WALLET] Aprendo Wallet su porta 8051...")
+        webbrowser.open("http://127.0.0.1:8051")
+        
+        print("✅ [MULTI-APP] Entrambe le applicazioni avviate!")
+        print("   📊 Dashboard 555: http://127.0.0.1:8050")
+        print("   💰 Wallet 555BT: http://127.0.0.1:8051")
+        
+    except Exception as e:
+        print(f"❌ [WALLET] Errore avvio wallet: {e}")
+        print("📊 [555] Continuo solo con Dashboard...")
+        
+else:
+    print(f"🌐 [DEPLOY] Modalità deployment su porta {port}")
 
 app.run(debug=False, host=host, port=port)
 

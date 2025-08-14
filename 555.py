@@ -4638,13 +4638,20 @@ def send_morning_briefing_manual(n_clicks):
     return no_update
 
 def generate_unified_report(report_type="manual", now=None):
-    """Funzione unificata per generare rapporti completi sia manuali che programmati"""
+    """Funzione unificata per generare rapporti completi sia manuali, programmati che giornalieri"""
     if now is None:
         import pytz
         italy_tz = pytz.timezone('Europe/Rome')
         now = datetime.datetime.now(italy_tz)
     
-    print(f'🚀 [{report_type.upper()}] Inizio generazione rapporto unificato alle {now.strftime('%H:%M:%S')}')
+    # Determina il tipo di report per i log
+    report_label = {
+        "manual": "MANUALE",
+        "scheduled": "PROGRAMMATO", 
+        "daily_snapshot": "GIORNALIERO"
+    }.get(report_type, report_type.upper())
+    
+    print(f'🚀 [{report_label}] Inizio generazione rapporto alle {now.strftime('%H:%M:%S')}')
     
     # === SALVA STATO ORIGINALE E ATTIVA TUTTI GLI INDICATORI/SEGNALI ML ===
     original_features_state = {}
@@ -4756,11 +4763,11 @@ def generate_unified_report(report_type="manual", now=None):
         
         # === SEZIONE 1: INDICATORI TECNICI ===
         try:
-            print("📈 [UNIFIED] Caricamento indicatori tecnici...")
+            print(f"📈 [{report_label}] Caricamento indicatori tecnici...")
             df_indicators = get_all_signals_summary('1d')  # Timeframe giornaliero
             if not df_indicators.empty:
-                if report_type == "manual":
-                    # Versione TABELLA COMPLETA per il manuale - TUTTI I 17 INDICATORI
+                if report_type in ["manual", "daily_snapshot"]:
+                    # Versione TABELLA COMPLETA per manuale e giornaliero - TUTTI I 17 INDICATORI
                     indicator_lines = ["📈 *INDICATORI TECNICI COMPLETI (17 INDICATORI)*"]
                     indicator_lines.append("```")
                     indicator_lines.append("")
@@ -4834,7 +4841,7 @@ def generate_unified_report(report_type="manual", now=None):
                     
                     indicator_lines.append("```")
                     unified_message_parts.append("\n".join(indicator_lines))
-                else:
+                elif report_type == "scheduled":
                     # Versione ottimizzata per scheduled
                     indicator_lines = ["📈 *INDICATORI TECNICI*"]
                     for _, row in df_indicators.iterrows()[:4]:  # Primi 4 asset per report ottimizzato
@@ -4852,12 +4859,12 @@ def generate_unified_report(report_type="manual", now=None):
             else:
                 unified_message_parts.append("📈 *INDICATORI TECNICI*\n⚠️ Nessun dato disponibile")
         except Exception as e:
-            print(f"❌ [UNIFIED] Errore preparazione indicatori: {e}")
+            print(f"❌ [{report_label}] Errore preparazione indicatori: {e}")
             unified_message_parts.append("📈 *INDICATORI TECNICI*\n❌ Errore nel caricamento")
         
         # === SEZIONE 2: SEGNALI ML ===
         try:
-            print("🤖 [UNIFIED] Caricamento modelli ML...")
+            print(f"🤖 [{report_label}] Caricamento modelli ML...")
             full_symbols = {**symbols, **crypto_symbols}
             
             # Rimuovi duplicati Gold se presenti (non dovrebbe più servire con la definizione corretta)
@@ -4872,8 +4879,8 @@ def generate_unified_report(report_type="manual", now=None):
             all_models = [name for name, (model_inst, desc) in models.items() if not isinstance(model_inst, str) or "_PLACEHOLDER" not in model_inst]
             print(f"🤖 [UNIFIED] Modelli ML disponibili: {len(all_models)} - {all_models}")
             
-            if report_type == "manual":
-                # Versione TABELLA COMPLETA per manuale - TUTTI I MODELLI ML
+            if report_type in ["manual", "daily_snapshot"]:
+                # Versione TABELLA COMPLETA per manuale e giornaliero - TUTTI I MODELLI ML
                 ml_lines.append("```")
                 ml_lines.append(f"🤖 MODELLI ML ATTIVI: {len(all_models)}")
                 ml_lines.append("")
@@ -5004,15 +5011,15 @@ def generate_unified_report(report_type="manual", now=None):
                         ml_lines.append(f"*{asset_short}*: {' '.join(asset_signals)}")
             
             unified_message_parts.append("\n".join(ml_lines))
-            print("✅ [UNIFIED] Sezione ML preparata")
+            print(f"✅ [{report_label}] Sezione ML preparata")
             
         except Exception as e:
-            print(f"❌ [UNIFIED] Errore preparazione ML: {e}")
+            print(f"❌ [{report_label}] Errore preparazione ML: {e}")
             unified_message_parts.append("\n\n🤖 *SEGNALI ML*\n❌ Errore nel caricamento")
             
         # === SEZIONE 2.5: CONFRONTO INDICATORI VS ML ===
         try:
-            print("⚖️ [UNIFIED] Generazione confronto Indicatori vs ML...")
+            print(f"⚖️ [{report_label}] Generazione confronto Indicatori vs ML...")
             
             # Crea tabella di confronto
             comparison_data = []
@@ -5104,10 +5111,10 @@ def generate_unified_report(report_type="manual", now=None):
                 comparison_lines.append(f"📊 Statistiche: {accordi}/4 accordi")
                 
                 unified_message_parts.append("\n".join(comparison_lines))
-                print("✅ [UNIFIED] Sezione Confronto preparata")
+                print(f"✅ [{report_label}] Sezione Confronto preparata")
                 
         except Exception as e:
-            print(f"❌ [UNIFIED] Errore preparazione confronto: {e}")
+            print(f"❌ [{report_label}] Errore preparazione confronto: {e}")
             unified_message_parts.append("\n\n⚖️ *CONFRONTO*\n❌ Errore nel calcolo")
         
         # === SEZIONE 3: CALENDARIO EVENTI ===
@@ -5230,7 +5237,7 @@ def generate_unified_report(report_type="manual", now=None):
         
         # === INVIO IN 4 MESSAGGI SEPARATI ===
         if unified_message_parts and len(unified_message_parts) >= 2:
-            print(f"📤 [UNIFIED] Invio rapporto diviso in 4 messaggi separati...")
+            print(f"📤 [{report_label}] Invio rapporto diviso in 4 messaggi separati...")
             
             # === MESSAGGIO 1: INDICATORI + SEGNALI ML + CONFRONTO ===
             msg_1_parts = []
@@ -5247,6 +5254,8 @@ def generate_unified_report(report_type="manual", now=None):
             msg1_content = "\n".join(msg_1_parts)
             if report_type == "manual":
                 msg1 = f"🚀 *INDICATORI + ML + CONFRONTO (1/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{msg1_content}"
+            elif report_type == "daily_snapshot":
+                msg1 = f"📸 *FOTO GIORNALIERA COMPLETA (1/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{msg1_content}"
             else:
                 msg1 = f"🚀 *INDICATORI E ML (1/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{msg1_content}"
             
@@ -5272,6 +5281,8 @@ def generate_unified_report(report_type="manual", now=None):
                 
                 if report_type == "manual":
                     msg2 = f"🚀 *NOTIZIE CRITICHE (2/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{msg2_content}"
+                elif report_type == "daily_snapshot":
+                    msg2 = f"📸 *NOTIZIE CRITICHE (2/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{msg2_content}"
                 else:
                     msg2 = f"🚀 *NOTIZIE CRITICHE (2/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{msg2_content}"
                     
@@ -5316,6 +5327,8 @@ def generate_unified_report(report_type="manual", now=None):
                 
                 if report_type == "manual":
                     msg3 = f"🚀 *ANALISI ML NOTIZIE (3/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{ml_news_content}"
+                elif report_type == "daily_snapshot":
+                    msg3 = f"📸 *ANALISI ML NOTIZIE (3/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{ml_news_content}"
                 else:
                     msg3 = f"🚀 *ANALISI ML NOTIZIE (3/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{ml_news_content}"
                     
@@ -5406,6 +5419,8 @@ def generate_unified_report(report_type="manual", now=None):
                 
                 if report_type == "manual":
                     msg4 = f"🚀 *CALENDARIO E ANALISI ML (4/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{final_content}"
+                elif report_type == "daily_snapshot":
+                    msg4 = f"📸 *CALENDARIO E ANALISI ML (4/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{final_content}"
                 else:
                     msg4 = f"🚀 *CALENDARIO E ANALISI ML (4/4) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{final_content}"
                     
@@ -5446,16 +5461,16 @@ def generate_unified_report(report_type="manual", now=None):
                     print(f"❌ [UNIFIED] Errore invio messaggio {i}/4 ({desc}): {e}")
             
             if success_count == 4:
-                print(f"✅ [UNIFIED] Tutti e 4 i messaggi inviati con successo")
+                print(f"✅ [{report_label}] Tutti e 4 i messaggi inviati con successo")
                 return True
             elif success_count > 0:
-                print(f"⚠️ [UNIFIED] {success_count}/4 messaggi inviati con successo")
+                print(f"⚠️ [{report_label}] {success_count}/4 messaggi inviati con successo")
                 return True
             else:
-                print(f"❌ [UNIFIED] Nessun messaggio inviato con successo")
+                print(f"❌ [{report_label}] Nessun messaggio inviato con successo")
                 return False
         
-        print(f"❌ [UNIFIED] Errore nell'invio del rapporto")
+        print(f"❌ [{report_label}] Errore nell'invio del rapporto")
         return False
         
     except Exception as e:
@@ -5968,6 +5983,32 @@ def schedule_telegram_reports():
             now = datetime.datetime.now(italy_tz)
             print(f"🕐 Orario Italia: {now.strftime('%H:%M:%S')} - {now.strftime('%d/%m/%Y')}")
             
+            # === CONTROLLO RECUPERO REPORT GIORNALIERO MANCATO ===
+            try:
+                # Controlla se oggi è già stato inviato il report giornaliero alle 13:00
+                today_report_file = os.path.join('salvataggi', f'daily_report_sent_{now.strftime("%Y%m%d")}.flag')
+                
+                # Se è dopo le 13:05 e non è stato ancora inviato, recupera
+                if now.hour >= 13 and now.minute >= 5 and not os.path.exists(today_report_file):
+                    print(f"🔄 [RECUPERO] Report giornaliero non inviato alle 13:00, recupero automatico...")
+                    try:
+                        # Genera report giornaliero completo (stessa funzione del server)
+                        success = generate_unified_report(report_type="daily_snapshot", now=now)
+                        
+                        if success:
+                            # Crea flag per evitare invii multipli
+                            with open(today_report_file, 'w') as f:
+                                f.write(f"Daily report sent at {now.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                            print(f"✅ [RECUPERO] Report giornaliero recuperato e inviato con successo")
+                        else:
+                            print(f"❌ [RECUPERO] Report giornaliero recupero fallito")
+                            
+                    except Exception as e:
+                        print(f"❌ [RECUPERO] Errore nel recupero report giornaliero: {e}")
+                        
+            except Exception as e:
+                print(f"❌ [RECUPERO] Errore controllo recupero: {e}")
+            
             # INVIO REPORT SETTIMANALE SEPARATO ogni lunedì alle 13:05
             if now.weekday() == 0 and now.hour == 13 and now.minute == 5:  # Lunedì alle 13:05 ora italiana
                 if is_feature_enabled("backtest_reports"):
@@ -6050,27 +6091,30 @@ def schedule_telegram_reports():
                 
                 time.sleep(60)  # Pausa per evitare invii multipli nello stesso minuto
             
-            # INVIO REPORT UNIFICATO ALLE 13:00 OGNI GIORNO (ora italiana) - SOLO TELEGRAM
+            # INVIO REPORT GIORNALIERO COMPLETO ALLE 13:00 OGNI GIORNO (ora italiana)
             elif (now.hour == 13 and now.minute == 0):
                 if is_feature_enabled("scheduled_reports"):
                     try:
-                        print(f"⏰ [SCHEDULER] Trigger delle 13:00 rilevato - Avvio invio report unificato...")
+                        print(f"📸 [SCHEDULER] Trigger delle 13:00 - Report giornaliero completo locale...")
                         
-                        # UNICO MESSAGGIO: Report completo unificato
-                        print("📤 [SCHEDULER] Invio report completo unificato Telegram")
-                        success = generate_unified_report(report_type="manual", now=now)  # Usa "manual" per report completo
+                        # REPORT GIORNALIERO COMPLETO (stessa funzione del server ma da locale)
+                        success = generate_unified_report(report_type="daily_snapshot", now=now)
                         
                         if success:
-                            print("✅ [SCHEDULER] Report Telegram inviato con successo")
+                            # Crea flag per tracking
+                            today_report_file = os.path.join('salvataggi', f'daily_report_sent_{now.strftime("%Y%m%d")}.flag')
+                            with open(today_report_file, 'w') as f:
+                                f.write(f"Daily report sent at {now.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                            print("✅ [SCHEDULER] Report giornaliero completo inviato con successo")
                         else:
-                            print("❌ [SCHEDULER] Report Telegram fallito")
+                            print("❌ [SCHEDULER] Report giornaliero completo fallito")
                         
                     except Exception as e:
-                        print(f"❌ [SCHEDULER] Errore critico durante il report delle 13:00: {e}")
+                        print(f"❌ [SCHEDULER] Errore critico durante il report giornaliero delle 13:00: {e}")
                         import traceback
                         traceback.print_exc()
                 else:
-                    print(f"ℹ️ [SCHEDULER] Report delle 13:00 saltato - funzione scheduled_reports disabilitata")
+                    print(f"ℹ️ [SCHEDULER] Report giornaliero delle 13:00 saltato - scheduled_reports disabilitata")
                 
                 time.sleep(60)  # Pausa per evitare invii multipli nello stesso minuto
             
@@ -6131,8 +6175,44 @@ host = '0.0.0.0'
 print("🚀 Dashboard Finanziaria Unificata - Layout Verticale")
 print(f"   🌍 Server running on {host}:{port}")
 
-# Browser opening for local development
-webbrowser.open("http://127.0.0.1:8050")
+# === MULTI-APP STARTUP ===
+if port == 8050:  # Solo se siamo su porta locale (non su Render)
+    print("🚀 [MULTI-APP] Avvio applicazioni multiple...")
+    
+    # 1. Apri Dashboard 555 (porta 8050)
+    print("📊 [555] Aprendo Dashboard principale su porta 8050...")
+    webbrowser.open("http://127.0.0.1:8050")
+    
+    # 2. Avvia e apri Wallet (porta 8051)
+    try:
+        import subprocess
+        import time
+        
+        # Avvia wallet.py su porta 8051 in background
+        wallet_process = subprocess.Popen(
+            ["python", "wallet.py", "--port", "8051"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        
+        # Aspetta un po' che il wallet si avvii
+        print("💰 [WALLET] Avvio wallet.py su porta 8051...")
+        time.sleep(3)
+        
+        # Apri wallet nel browser
+        print("💰 [WALLET] Aprendo Wallet su porta 8051...")
+        webbrowser.open("http://127.0.0.1:8051")
+        
+        print("✅ [MULTI-APP] Entrambe le applicazioni avviate!")
+        print("   📊 Dashboard 555: http://127.0.0.1:8050")
+        print("   💰 Wallet 555BT: http://127.0.0.1:8051")
+        
+    except Exception as e:
+        print(f"❌ [WALLET] Errore avvio wallet: {e}")
+        print("📊 [555] Continuo solo con Dashboard...")
+        
+else:
+    print(f"🌐 [DEPLOY] Modalità deployment su porta {port}")
 
 app.run(debug=False, host=host, port=port)
 
