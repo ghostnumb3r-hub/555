@@ -5866,36 +5866,36 @@ if __name__ == "__main__":
             return False
 
     def is_keep_alive_time():
-    """Check if current time is within scheduled events time windows"""
-    import pytz
-    italy_tz = pytz.timezone('Europe/Rome')
-    now = datetime.datetime.now(italy_tz)
-    
-    # List of scheduled event times with windows (start 10 min before, end 10 min after)
-    scheduled_times = [
-        # Morning briefing at 09:00
-        (8, 50, 9, 10),  # (start_hour, start_minute, end_hour, end_minute)
-        # Unified report at 13:00
-        (12, 50, 13, 10),
-        # Monday weekly report at 13:05
-        (12, 55, 13, 15)  # Only on Mondays, but we'll check day in the logic
-    ]
-    
-    # Check if current time is in any of the scheduled windows
-    for start_h, start_m, end_h, end_m in scheduled_times:
-        # Special case for Monday weekly report
-        if start_h == 12 and start_m == 55 and now.weekday() != 0:  # Not Monday
-            continue
-            
-        # Create time objects for comparison
-        start_time = now.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
-        end_time = now.replace(hour=end_h, minute=end_m, second=0, microsecond=0)
+        """Check if current time is within scheduled events time windows"""
+        import pytz
+        italy_tz = pytz.timezone('Europe/Rome')
+        now = datetime.datetime.now(italy_tz)
         
-        # Check if current time is in the window
-        if start_time <= now <= end_time:
-            return True
-    
-    return False
+        # List of scheduled event times with windows (start 10 min before, end 10 min after)
+        scheduled_times = [
+            # Morning briefing at 09:00
+            (8, 50, 9, 10),  # (start_hour, start_minute, end_hour, end_minute)
+            # Unified report at 13:00
+            (12, 50, 13, 10),
+            # Monday weekly report at 13:05
+            (12, 55, 13, 15)  # Only on Mondays, but we'll check day in the logic
+        ]
+        
+        # Check if current time is in any of the scheduled windows
+        for start_h, start_m, end_h, end_m in scheduled_times:
+            # Special case for Monday weekly report
+            if start_h == 12 and start_m == 55 and now.weekday() != 0:  # Not Monday
+                continue
+                
+            # Create time objects for comparison
+            start_time = now.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
+            end_time = now.replace(hour=end_h, minute=end_m, second=0, microsecond=0)
+            
+            # Check if current time is in the window
+            if start_time <= now <= end_time:
+                return True
+        
+        return False
 
 def schedule_telegram_reports():
         import pytz
