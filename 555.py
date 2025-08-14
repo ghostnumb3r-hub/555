@@ -132,16 +132,25 @@ def send_with_temporary_override(feature_name, send_function, *args, **kwargs):
 def invia_messaggio_telegram(msg):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     
+    # 🔍 DEBUG RENDER: Log dettagliato
+    print(f"🔍 [RENDER-DEBUG] === INIZIO INVIO TELEGRAM ===")
+    print(f"🔍 [RENDER-DEBUG] Messaggio lunghezza: {len(msg)} caratteri")
+    print(f"🔍 [RENDER-DEBUG] URL: {url[:60]}...")
+    print(f"🔍 [RENDER-DEBUG] Chat ID: {TELEGRAM_CHAT_ID}")
+    print(f"🔍 [RENDER-DEBUG] Token check: {'OK' if len(TELEGRAM_TOKEN) > 30 else 'ERRORE'}")
+    
     # Pulisci solo i caratteri problematici ma mantieni la formattazione base
     clean_msg = msg.replace('```', '`').replace('**', '*')  # Converti formattazione HTML a Markdown
     
     # Gestione intelligente della lunghezza del messaggio
     if len(clean_msg) > 4090:  # Lascia margine per il footer
+        print(f"🔍 [RENDER-DEBUG] Messaggio troppo lungo, troncamento...")
         # Trova un punto di taglio sensato (fine riga)
         cut_point = clean_msg.rfind('\n', 0, 4000)
         if cut_point == -1:
             cut_point = 4000
         clean_msg = clean_msg[:cut_point] + "\n\n... (continua nel prossimo messaggio)"
+        print(f"🔍 [RENDER-DEBUG] Messaggio troncato a: {len(clean_msg)} caratteri")
     
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
@@ -149,28 +158,73 @@ def invia_messaggio_telegram(msg):
         "parse_mode": "Markdown"  # Abilita formattazione Markdown
     }
     
+    print(f"🔍 [RENDER-DEBUG] Payload preparato, invio richiesta POST...")
+    
     try:
-        r = requests.post(url, data=payload, timeout=10)
+        print(f"🔍 [RENDER-DEBUG] Chiamata requests.post() con timeout 15s...")
+        r = requests.post(url, data=payload, timeout=15)  # Timeout aumentato per Render
+        
+        print(f"🔍 [RENDER-DEBUG] Risposta ricevuta! Status Code: {r.status_code}")
+        print(f"🔍 [RENDER-DEBUG] Headers: {dict(r.headers)}")
+        
         if r.status_code == 200:
             print(f"✅ [Telegram] Messaggio inviato con successo ({len(clean_msg)} caratteri)")
+            try:
+                response_json = r.json()
+                msg_id = response_json.get('result', {}).get('message_id', 'N/A')
+                print(f"✅ [RENDER-DEBUG] Message ID ricevuto: {msg_id}")
+            except:
+                print(f"⚠️ [RENDER-DEBUG] Impossibile parsare JSON response")
             return True
         else:
-            print(f"❌ [Telegram] Errore HTTP {r.status_code}: {r.text}")
+            print(f"❌ [Telegram] Errore HTTP {r.status_code}")
+            print(f"❌ [RENDER-DEBUG] Response Text: {r.text[:300]}")
+            
             # Se fallisce con Markdown, prova senza formattazione
+            print(f"🔄 [RENDER-DEBUG] Tentativo fallback senza Markdown...")
             fallback_msg = clean_msg.replace('*', '').replace('_', '').replace('`', '')
             payload_fallback = {
                 "chat_id": TELEGRAM_CHAT_ID,
                 "text": fallback_msg,
                 "parse_mode": None
             }
-            r2 = requests.post(url, data=payload_fallback, timeout=10)
+            
+            print(f"🔍 [RENDER-DEBUG] Fallback: invio senza formattazione...")
+            r2 = requests.post(url, data=payload_fallback, timeout=15)
+            print(f"🔍 [RENDER-DEBUG] Fallback Status Code: {r2.status_code}")
+            
             if r2.status_code == 200:
                 print(f"✅ [Telegram] Messaggio inviato senza formattazione")
+                try:
+                    response_json2 = r2.json()
+                    msg_id2 = response_json2.get('result', {}).get('message_id', 'N/A')
+                    print(f"✅ [RENDER-DEBUG] Fallback Message ID: {msg_id2}")
+                except:
+                    print(f"⚠️ [RENDER-DEBUG] Fallback: impossibile parsare JSON")
                 return True
+            else:
+                print(f"❌ [RENDER-DEBUG] Fallback failed: {r2.text[:200]}")
+                
             return False
-    except Exception as e:
-        print(f"❌ [Telegram] Errore di connessione: {e}")
+            
+    except requests.exceptions.Timeout as e:
+        print(f"❌ [Telegram] TIMEOUT dopo 15 secondi: {e}")
+        print(f"❌ [RENDER-DEBUG] Render potrebbe avere problemi di rete")
         return False
+    except requests.exceptions.ConnectionError as e:
+        print(f"❌ [Telegram] ERRORE CONNESSIONE: {e}")
+        print(f"❌ [RENDER-DEBUG] Render blocca connessioni esterne?")
+        return False
+    except Exception as e:
+        print(f"❌ [Telegram] Errore generico: {e}")
+        print(f"❌ [RENDER-DEBUG] Tipo eccezione: {type(e).__name__}")
+        import traceback
+        tb = traceback.format_exc()
+        print(f"❌ [RENDER-DEBUG] Traceback: {tb[:400]}...")
+        return False
+    
+    finally:
+        print(f"🔍 [RENDER-DEBUG] === FINE INVIO TELEGRAM ===\n")
 
 # === EVENTI ===
 today = datetime.date.today()
