@@ -6214,5 +6214,71 @@ if port == 8050:  # Solo se siamo su porta locale (non su Render)
 else:
     print(f"🌐 [DEPLOY] Modalità deployment su porta {port}")
 
+# === SYNC API ENDPOINTS ===
+@app.server.route('/api/files-info', methods=['GET'])
+def get_files_info():
+    """Endpoint per sync_system.py - ottieni info sui file"""
+    try:
+        import pytz
+        italy_tz = pytz.timezone('Europe/Rome')
+        salvataggi_path = "salvataggi"
+        
+        files_to_check = [
+            "analysis_text.txt",
+            "segnali_tecnici.csv", 
+            "previsioni_ml.csv",
+            "weekly_report_enhanced.txt",
+            "portfolio_analysis.txt"
+        ]
+        
+        files_info = {}
+        for filename in files_to_check:
+            file_path = os.path.join(salvataggi_path, filename)
+            if os.path.exists(file_path):
+                stat = os.stat(file_path)
+                files_info[filename] = {
+                    "size": stat.st_size,
+                    "modified": datetime.datetime.fromtimestamp(stat.st_mtime, italy_tz).isoformat(),
+                    "exists": True
+                }
+            else:
+                files_info[filename] = {"exists": False}
+        
+        return flask.jsonify(files_info)
+    except Exception as e:
+        return flask.jsonify({"error": str(e)}), 500
+
+@app.server.route('/api/download/<filename>', methods=['GET'])
+def download_file(filename):
+    """Endpoint per sync_system.py - scarica file"""
+    try:
+        file_path = os.path.join("salvataggi", filename)
+        if not os.path.exists(file_path):
+            return flask.jsonify({"error": "File not found"}), 404
+        return flask.send_file(file_path, as_attachment=True)
+    except Exception as e:
+        return flask.jsonify({"error": str(e)}), 500
+
+@app.server.route('/api/upload', methods=['POST'])
+def upload_file():
+    """Endpoint per sync_system.py - carica file"""
+    try:
+        if 'file' not in flask.request.files:
+            return flask.jsonify({"error": "No file provided"}), 400
+        file = flask.request.files['file']
+        if file.filename == '':
+            return flask.jsonify({"error": "No file selected"}), 400
+        
+        salvataggi_path = "salvataggi"
+        if not os.path.exists(salvataggi_path):
+            os.makedirs(salvataggi_path)
+        file_path = os.path.join(salvataggi_path, file.filename)
+        file.save(file_path)
+        return flask.jsonify({"message": f"File {file.filename} uploaded"})
+    except Exception as e:
+        return flask.jsonify({"error": str(e)}), 500
+
+print("🔄 [SYNC-API] Endpoint API per sync_system.py caricati!")
+
 app.run(debug=False, host=host, port=port)
 
