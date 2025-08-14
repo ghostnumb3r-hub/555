@@ -4372,6 +4372,9 @@ from dash import no_update
 def send_backtest_manual(n_clicks):
     """Esegue 555bt.py per generare l'analisi e invia il backtest con override temporaneo"""
     if n_clicks:
+        # ATTIVA IL KEEP-ALIVE per 10 minuti
+        trigger_manual_keep_alive()
+        
         # Usa override temporaneo per garantire l'invio anche se la funzione è disabilitata
         def _send_backtest():
             try:
@@ -4603,6 +4606,10 @@ def send_unified_report_manual(n_clicks):
     if n_clicks:
         try:
             print("🚀 [MANUAL] Richiesta di invio manuale ricevuta. Chiamo la funzione unificata...")
+            
+            # ATTIVA IL KEEP-ALIVE per 10 minuti
+            trigger_manual_keep_alive()
+            
             # Chiama la funzione unificata per generare e inviare il rapporto manuale
             generate_unified_report(report_type="manual")
         except Exception as e:
@@ -4618,6 +4625,9 @@ def send_unified_report_manual(n_clicks):
 def send_morning_briefing_manual(n_clicks):
     """Callback per inviare la rassegna stampa mattutina manualmente."""
     if n_clicks:
+        # ATTIVA IL KEEP-ALIVE per 10 minuti
+        trigger_manual_keep_alive()
+        
         try:
             print("🌅 [MANUAL] Richiesta di invio manuale rassegna stampa ricevuta...")
             # Usa override temporaneo per garantire l'invio anche se la funzione è disabilitata
@@ -5919,11 +5929,28 @@ if __name__ == "__main__":
             print(f"❌ [KEEP-ALIVE] Failed to ping app: {e}")
             return False
 
-    def is_keep_alive_time():
-        """Check if current time is within scheduled events time windows"""
+    def trigger_manual_keep_alive():
+        """Trigger manual keep-alive for 10 minutes from now"""
         import pytz
         italy_tz = pytz.timezone('Europe/Rome')
         now = datetime.datetime.now(italy_tz)
+        
+        # Set the last manual trigger timestamp
+        is_keep_alive_time.last_manual_trigger = now
+        print(f"🔄 [MANUAL-KEEPALIVE] Manual trigger activated at {now.strftime('%H:%M:%S')} (10min duration)")
+    
+    def is_keep_alive_time():
+        """Check if current time is within scheduled events time windows OR if manual button was recently pressed"""
+        import pytz
+        italy_tz = pytz.timezone('Europe/Rome')
+        now = datetime.datetime.now(italy_tz)
+        
+        # Check if a manual button was pressed recently (last 10 minutes)
+        if hasattr(is_keep_alive_time, 'last_manual_trigger'):
+            time_since_manual = (now - is_keep_alive_time.last_manual_trigger).total_seconds()
+            if time_since_manual < 600:  # 10 minutes
+                print(f"🔄 [MANUAL-KEEPALIVE] Active due to recent manual trigger ({int(time_since_manual)}s ago)")
+                return True
         
         # List of scheduled event times with windows (start 10 min before, end 10 min after)
         scheduled_times = [
@@ -5951,7 +5978,7 @@ if __name__ == "__main__":
         
         return False
 
-def schedule_telegram_reports():
+    def schedule_telegram_reports():
         import pytz
         italy_tz = pytz.timezone('Europe/Rome')
         
