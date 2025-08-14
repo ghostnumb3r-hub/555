@@ -6135,21 +6135,21 @@ def schedule_telegram_reports():
                         weekly_backtest = generate_weekly_backtest_summary()
                         if weekly_backtest:
                             # Prepara il messaggio settimanale con header specifico
-                            weekly_message = f"📈 *REPORT SETTIMANALE LUNEDÌ - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{weekly_backtest}"
+                            weekly_message = f"📊 *REPORT SETTIMANALE LUNEDÌ - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{weekly_backtest}"
                             
                             # Gestione lunghezza messaggio settimanale
                             if len(weekly_message) > 4000:
                                 print(f"⚠️ [SCHEDULER] Report settimanale lungo ({len(weekly_message)} caratteri), suddivisione...")
                                 
                                 # Dividi in più messaggi se necessario
-                                header = f"📈 *REPORT SETTIMANALE (parte 1) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n"
+                                header = f"📊 *REPORT SETTIMANALE (parte 1) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n"
                                 content_chunks = [weekly_backtest[i:i+3500] for i in range(0, len(weekly_backtest), 3500)]
                                 
                                 for i, chunk in enumerate(content_chunks):
                                     if i == 0:
                                         message = header + chunk
                                     else:
-                                        message = f"📈 *REPORT SETTIMANALE (parte {i+1})*\n\n{chunk}"
+                                        message = f"📊 *REPORT SETTIMANALE (parte {i+1})*\n\n{chunk}"
                                     
                                     send_with_temporary_override("backtest_reports", invia_messaggio_telegram, message)
                                     print(f"✅ [SCHEDULER] Report settimanale parte {i+1}/{len(content_chunks)} inviato ({len(message)} caratteri)")
@@ -6275,7 +6275,7 @@ def smart_keep_alive():
                 print(f"❌ [SMART-KEEPALIVE] Error: {e}")
                 time.sleep(300)  # 5 minutes on error
     
-# Start both threads
+# Start optimized threads
 scheduler_thread = threading.Thread(target=schedule_telegram_reports, daemon=True)
 scheduler_thread.start()
 
