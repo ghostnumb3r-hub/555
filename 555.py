@@ -6023,7 +6023,7 @@ def schedule_telegram_reports():
             time.sleep(30)
 
     # === SMART KEEP-ALIVE THREAD ===
-    def smart_keep_alive():
+def smart_keep_alive():
         """Smart keep-alive that only activates during scheduled message windows"""
         import pytz
         italy_tz = pytz.timezone('Europe/Rome')
