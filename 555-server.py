@@ -78,6 +78,9 @@ app.index_string = '''
         <title>{%title%}</title>
         <link rel="icon" type="image/x-icon" href="/assets/favicon.ico">
         
+        <!-- Mobile Optimization -->
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=0.5, user-scalable=yes">
+        
         <!-- PWA Meta Tags -->
         <meta name="theme-color" content="#00d4aa">
         <meta name="mobile-web-app-capable" content="yes">
@@ -96,6 +99,221 @@ app.index_string = '''
         <link rel="apple-touch-icon" sizes="120x120" href="/assets/icon-128x128.png">
         
         {%css%}
+        
+        <!-- Mobile-First CSS -->
+        <style>
+            /* === MOBILE-FIRST RESPONSIVE CSS === */
+            * {
+                box-sizing: border-box;
+            }
+            
+            body {
+                margin: 0;
+                padding: 10px;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background-color: #f8f9fa;
+                font-size: 14px;
+                line-height: 1.4;
+            }
+            
+            /* Container principale mobile-first */
+            ._dash-loading {
+                margin: 0;
+            }
+            
+            /* Titoli responsive */
+            h1, h2, h3, h4, h5, h6 {
+                margin: 10px 0;
+                line-height: 1.2;
+                word-wrap: break-word;
+            }
+            
+            h1 { font-size: 1.8rem; }
+            h2 { font-size: 1.5rem; }
+            h3 { font-size: 1.3rem; }
+            h4 { font-size: 1.1rem; }
+            
+            /* Pulsanti ottimizzati per touch */
+            button, .dash-button {
+                min-height: 44px;
+                min-width: 44px;
+                padding: 12px 16px;
+                margin: 5px 3px;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 500;
+                border: none;
+                cursor: pointer;
+                touch-action: manipulation;
+                -webkit-tap-highlight-color: transparent;
+            }
+            
+            /* Tabelle responsive */
+            .dash-table-container {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                max-width: 100%;
+                margin: 10px 0;
+            }
+            
+            .dash-table {
+                font-size: 12px;
+                min-width: 100%;
+            }
+            
+            .dash-table .dash-cell {
+                padding: 8px 4px;
+                min-width: 80px;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            
+            .dash-table .dash-header {
+                background-color: #e9ecef;
+                font-weight: 600;
+                font-size: 11px;
+                padding: 10px 6px;
+            }
+            
+            /* Cards e sezioni */
+            .card, .section {
+                background: white;
+                border-radius: 12px;
+                padding: 15px;
+                margin: 10px 0;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                border: 1px solid #e9ecef;
+            }
+            
+            /* Dropdown e input */
+            .Select-control, .dash-dropdown {
+                min-height: 44px;
+                font-size: 14px;
+            }
+            
+            /* Grid responsive */
+            .row {
+                display: flex;
+                flex-wrap: wrap;
+                margin: -5px;
+            }
+            
+            .col {
+                flex: 1;
+                min-width: 280px;
+                padding: 5px;
+            }
+            
+            /* Loading e stati */
+            ._dash-loading {
+                text-align: center;
+                padding: 20px;
+                font-size: 16px;
+                color: #6c757d;
+            }
+            
+            /* Status indicators mobile */
+            .status-indicator {
+                display: inline-block;
+                padding: 4px 8px;
+                border-radius: 12px;
+                font-size: 11px;
+                font-weight: 600;
+                margin: 2px;
+            }
+            
+            /* === MEDIA QUERIES === */
+            
+            /* Tablet (768px+) */
+            @media (min-width: 768px) {
+                body {
+                    padding: 15px;
+                    font-size: 15px;
+                }
+                
+                h1 { font-size: 2.2rem; }
+                h2 { font-size: 1.8rem; }
+                
+                .dash-table {
+                    font-size: 13px;
+                }
+                
+                .dash-table .dash-cell {
+                    padding: 10px 8px;
+                    min-width: 100px;
+                }
+                
+                button, .dash-button {
+                    font-size: 15px;
+                    padding: 14px 20px;
+                }
+                
+                .card, .section {
+                    padding: 20px;
+                    margin: 15px 0;
+                }
+            }
+            
+            /* Desktop (1024px+) */
+            @media (min-width: 1024px) {
+                body {
+                    padding: 20px;
+                    max-width: 1200px;
+                    margin: 0 auto;
+                }
+                
+                .dash-table {
+                    font-size: 14px;
+                }
+                
+                .dash-table .dash-cell {
+                    padding: 12px 10px;
+                    min-width: 120px;
+                }
+                
+                .col {
+                    min-width: 300px;
+                }
+            }
+            
+            /* Large Desktop (1440px+) */
+            @media (min-width: 1440px) {
+                body {
+                    max-width: 1400px;
+                }
+                
+                .dash-table .dash-cell {
+                    min-width: 140px;
+                }
+            }
+            
+            /* High DPI screens */
+            @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+                body {
+                    -webkit-font-smoothing: antialiased;
+                    -moz-osx-font-smoothing: grayscale;
+                }
+            }
+            
+            /* Dark mode support */
+            @media (prefers-color-scheme: dark) {
+                body {
+                    background-color: #1a1a1a;
+                    color: #e9ecef;
+                }
+                
+                .card, .section {
+                    background: #2d2d2d;
+                    border-color: #444;
+                }
+                
+                .dash-table .dash-header {
+                    background-color: #444;
+                    color: white;
+                }
+            }
+        </style>
     </head>
     <body>
         {%app_entry%}
@@ -2164,8 +2382,29 @@ def aggiorna_tabella(categoria):
         columns=[{"name": i, "id": i} for i in df.columns],
         data=df.to_dict("records"),
         style_data_conditional=style_rows,
-        style_cell={'textAlign': 'left', 'padding': '8px', 'whiteSpace': 'normal'},
-        style_header={'backgroundColor': '#28a745', 'color': 'white', 'fontWeight': 'bold'},
+        style_cell={
+            'textAlign': 'left', 
+            'padding': '12px 8px', 
+            'whiteSpace': 'normal',
+            'fontSize': '14px',
+            'minWidth': '100px',
+            'maxWidth': '200px',
+            'overflow': 'hidden',
+            'textOverflow': 'ellipsis'
+        },
+        style_header={
+            'backgroundColor': '#28a745', 
+            'color': 'white', 
+            'fontWeight': 'bold',
+            'fontSize': '15px',
+            'padding': '15px 10px',
+            'textAlign': 'center'
+        },
+        style_table={
+            'overflowX': 'auto',
+            'minWidth': '100%'
+        },
+        style_as_list_view=True,
         page_size=10
     )
 
@@ -6053,34 +6292,18 @@ if __name__ == "__main__":
             return False
 
     def is_keep_alive_time():
-        """Check if current time is within scheduled events time windows"""
+        """Check if current time is within extended keepalive hours (7:45-22:00)"""
         import pytz
         italy_tz = pytz.timezone('Europe/Rome')
         now = datetime.datetime.now(italy_tz)
         
-        # List of scheduled event times with windows (start 10 min before, end 10 min after)
-        scheduled_times = [
-            # Morning briefing at 09:00
-            (8, 50, 9, 10),  # (start_hour, start_minute, end_hour, end_minute)
-            # Unified report at 13:00
-            (12, 50, 13, 10),
-            # Monday weekly report at 13:05
-            (12, 55, 13, 15)  # Only on Mondays, but we'll check day in the logic
-        ]
+        # Extended keepalive window: 7:45 AM to 10:00 PM (22:00)
+        start_time = now.replace(hour=7, minute=45, second=0, microsecond=0)
+        end_time = now.replace(hour=22, minute=0, second=0, microsecond=0)
         
-        # Check if current time is in any of the scheduled windows
-        for start_h, start_m, end_h, end_m in scheduled_times:
-            # Special case for Monday weekly report
-            if start_h == 12 and start_m == 55 and now.weekday() != 0:  # Not Monday
-                continue
-                
-            # Create time objects for comparison
-            start_time = now.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
-            end_time = now.replace(hour=end_h, minute=end_m, second=0, microsecond=0)
-            
-            # Check if current time is in the window
-            if start_time <= now <= end_time:
-                return True
+        # Check if current time is within the extended window
+        if start_time <= now <= end_time:
+            return True
         
         return False
 
@@ -6240,40 +6463,57 @@ def schedule_telegram_reports():
 
     # === SMART KEEP-ALIVE THREAD ===
 def smart_keep_alive():
-        """Smart keep-alive that only activates during scheduled message windows"""
+        """Extended keep-alive active from 7:45 AM to 10:00 PM with hourly pings"""
         import pytz
         italy_tz = pytz.timezone('Europe/Rome')
         app_url = os.environ.get('RENDER_EXTERNAL_URL', 'http://localhost:8050')
         
-        print(f"🤖 [SMART-KEEPALIVE] Started for URL: {app_url}")
-        print(f"⏰ [SMART-KEEPALIVE] Will activate during: 09:23-09:43, 12:50-13:10, 13:05-13:25 (Mon only)")
+        print(f"🤖 [EXTENDED-KEEPALIVE] Started for URL: {app_url}")
+        print(f"⏰ [EXTENDED-KEEPALIVE] Active window: 07:45-22:00 (every hour ping)")
+        print(f"🔄 [EXTENDED-KEEPALIVE] Ping interval: 1 hour during active, 2 hours dormant")
         
         while True:
             try:
                 current_time = datetime.datetime.now(italy_tz)
                 
-                # Check if we're in a scheduled window
+                # Check if we're in extended keepalive hours (7:45-22:00)
                 if is_keep_alive_time():
-                    print(f"🟢 [SMART-KEEPALIVE] Active window detected - {current_time.strftime('%H:%M:%S')}")
+                    # Log every hour during active period
+                    if current_time.minute % 60 == 0 or current_time.minute == 0:
+                        print(f"🟢 [EXTENDED-KEEPALIVE] Active period - {current_time.strftime('%H:%M:%S')}")
                     
                     # Ping the app to keep it awake
                     ping_success = keep_app_alive(app_url)
                     if ping_success:
-                        print(f"✅ [SMART-KEEPALIVE] Ping successful at {current_time.strftime('%H:%M:%S')}")
+                        print(f"✅ [EXTENDED-KEEPALIVE] Ping OK at {current_time.strftime('%H:%M:%S')}")
                     else:
-                        print(f"❌ [SMART-KEEPALIVE] Ping failed at {current_time.strftime('%H:%M:%S')}")
+                        print(f"❌ [EXTENDED-KEEPALIVE] Ping FAILED at {current_time.strftime('%H:%M:%S')}")
+                        # Retry ping after 10 minutes if failed
+                        time.sleep(600)  # 10 minutes
+                        continue
                     
-                    # Sleep for 5 minutes during active windows
-                    time.sleep(300)  # 5 minutes
+                    # Sleep for 1 hour during active hours (7:45-22:00)
+                    time.sleep(3600)  # 1 hour = 3600 seconds
                 else:
-                    # Not in active window - sleep for longer to save resources
-                    if current_time.minute % 30 == 0:  # Log every 30 minutes when inactive
-                        print(f"⚪ [SMART-KEEPALIVE] Dormant mode - {current_time.strftime('%H:%M:%S')}")
-                    time.sleep(600)  # 10 minutes during dormant periods
+                    # Dormant mode (22:00-07:45) - ping every 2 hours
+                    if current_time.minute == 0:  # Log only at the top of each hour
+                        print(f"⚪ [EXTENDED-KEEPALIVE] Dormant mode - {current_time.strftime('%H:%M:%S')}")
+                    
+                    # Still ping occasionally during dormant hours to prevent complete sleep
+                    ping_success = keep_app_alive(app_url)
+                    if ping_success:
+                        print(f"🌙 [EXTENDED-KEEPALIVE] Dormant ping OK at {current_time.strftime('%H:%M:%S')}")
+                    else:
+                        print(f"🌙 [EXTENDED-KEEPALIVE] Dormant ping failed at {current_time.strftime('%H:%M:%S')}")
+                    
+                    # Sleep for 2 hours during dormant period
+                    time.sleep(7200)  # 2 hours = 7200 seconds
                     
             except Exception as e:
-                print(f"❌ [SMART-KEEPALIVE] Error: {e}")
-                time.sleep(300)  # 5 minutes on error
+                print(f"❌ [EXTENDED-KEEPALIVE] Error: {e}")
+                import traceback
+                traceback.print_exc()
+                time.sleep(1800)  # 30 minutes on error, then retry
     
 # Start optimized threads
 scheduler_thread = threading.Thread(target=schedule_telegram_reports, daemon=True)
