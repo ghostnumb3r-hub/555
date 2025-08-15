@@ -3757,6 +3757,11 @@ def train_model(model_name_or_instance, df):
         
         # Training del modello
         try:
+            # Controllo aggiuntivo del modello
+            if not hasattr(model, 'fit'):
+                print(f"Model {type(model)} doesn't have fit method")
+                return 0.5, 0.5
+                
             model.fit(X_train, y_train)
         except Exception as e:
             print(f"Model fit failed: {e}")
@@ -6356,7 +6361,11 @@ def smart_keep_alive():
         """Extended keep-alive active from 7:45 AM to 10:00 PM with hourly pings"""
         import pytz
         italy_tz = pytz.timezone('Europe/Rome')
-        app_url = os.environ.get('RENDER_EXTERNAL_URL', 'http://localhost:8050')
+        # Fix per Render - USA URL corretto del deploy
+        app_url = os.environ.get('RENDER_EXTERNAL_URL', 'https://five55-dd08.onrender.com')
+        # Se siamo in locale, usa localhost
+        if port == 8050:
+            app_url = 'http://localhost:8050'
         
         print(f"🤖 [EXTENDED-KEEPALIVE] Started for URL: {app_url}")
         print(f"⏰ [EXTENDED-KEEPALIVE] Active window: 07:45-22:00 (every hour ping)")

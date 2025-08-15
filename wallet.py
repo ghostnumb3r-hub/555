@@ -525,6 +525,198 @@ def extract_recommendations_from_text(portfolio_content):
         print(f"❌ [WALLET] Errore estrazione raccomandazioni: {e}")
         return []
 
+# === FUNZIONI PER ANALISI PERFORMANCE SETTIMANALI ===
+def load_weekly_performance_analysis():
+    """Carica e analizza le performance settimanali dalle raccomandazioni storiche"""
+    wallet_dir = 'salvataggiwallet'
+    recommendations_file = os.path.join(wallet_dir, 'raccomandazioni_storiche.csv')
+    performance_file = os.path.join(wallet_dir, 'performance_storiche.csv')
+    
+    analysis = {
+        'available': False,
+        'total_recommendations': 0,
+        'accuracy_by_asset': {},
+        'recent_performance': {},
+        'trend_analysis': {},
+        'summary_stats': {}
+    }
+    
+    try:
+        if not os.path.exists(recommendations_file) or not os.path.exists(performance_file):
+            return analysis
+        
+        # Carica i dati
+        recs_df = pd.read_csv(recommendations_file)
+        perf_df = pd.read_csv(performance_file)
+        
+        if recs_df.empty or perf_df.empty:
+            return analysis
+        
+        # Converti timestamp
+        recs_df['timestamp'] = pd.to_datetime(recs_df['timestamp'])
+        perf_df['timestamp'] = pd.to_datetime(perf_df['timestamp'])
+        
+        # Filtra ultimi 7 giorni
+        cutoff_date = datetime.datetime.now() - datetime.timedelta(days=7)
+        recent_recs = recs_df[recs_df['timestamp'] >= cutoff_date]
+        recent_perf = perf_df[perf_df['timestamp'] >= cutoff_date]
+        
+        analysis['available'] = True
+        analysis['total_recommendations'] = len(recent_recs)
+        
+        # Analisi per asset
+        for asset in recent_recs['asset'].unique():
+            asset_recs = recent_recs[recent_recs['asset'] == asset]
+            asset_perf = recent_perf[recent_perf['asset'] == asset]
+            
+            if not asset_perf.empty:
+                # Calcola accuracy semplificata
+                buy_recs = len(asset_recs[asset_recs['segnale'] == 'BUY'])
+                sell_recs = len(asset_recs[asset_recs['segnale'] == 'SELL'])
+                
+                # Performance media 1w
+                avg_performance = asset_recs['performance_1w'].mean() if 'performance_1w' in asset_recs.columns else 0.0
+                
+                # Ultima raccomandazione
+                last_rec = asset_recs.iloc[-1] if not asset_recs.empty else None
+                
+                analysis['accuracy_by_asset'][asset] = {
+                    'buy_signals': buy_recs,
+                    'sell_signals': sell_recs,
+                    'total_signals': len(asset_recs),
+                    'avg_performance_1w': round(avg_performance, 2),
+                    'last_recommendation': last_rec['segnale'] if last_rec is not None else 'N/A',
+                    'last_action': last_rec['azione'] if last_rec is not None else 'N/A',
+                    'consistency_score': calculate_consistency_score(asset_recs)
+                }
+        
+        # Summary stats
+        analysis['summary_stats'] = {
+            'total_days_analyzed': 7,
+            'unique_assets': len(recent_recs['asset'].unique()),
+            'avg_daily_recommendations': round(len(recent_recs) / 7, 1),
+            'most_recommended_action': recent_recs['segnale'].mode().iloc[0] if not recent_recs.empty else 'N/A',
+            'high_risk_recommendations': len(recent_recs[recent_recs['rischio'] == 'ALTISSIMO']),
+            'last_update': recent_recs['timestamp'].max().strftime('%d/%m/%Y %H:%M') if not recent_recs.empty else 'N/A'
+        }
+        
+        print(f"✅ [WALLET] Analisi performance settimanale caricata: {analysis['total_recommendations']} raccomandazioni")
+        
+    except Exception as e:
+        print(f"❌ [WALLET] Errore caricamento performance settimanale: {e}")
+        
+    return analysis
+
+def calculate_consistency_score(asset_recommendations):
+    """Calcola un punteggio di consistenza per le raccomandazioni"""
+    if len(asset_recommendations) < 2:
+        return 0.5
+    
+    # Conta cambi di direzione BUY/SELL
+    signals = asset_recommendations['segnale'].tolist()
+    changes = sum(1 for i in range(1, len(signals)) if signals[i] != signals[i-1])
+    
+    # Più cambi = meno consistenza
+    consistency = 1.0 - (changes / len(signals))
+    return round(max(0.0, consistency), 2)
+
+def load_weekly_summary_analysis():
+    """Carica e genera il riepilogo dei consigli settimanali"""
+    wallet_dir = 'salvataggiwallet'
+    recommendations_file = os.path.join(wallet_dir, 'raccomandazioni_storiche.csv')
+    
+    summary = {
+        'available': False,
+        'trend_patterns': {},
+        'asset_focus': {},
+        'risk_distribution': {},
+        'weekly_insights': [],
+        'action_frequency': {}
+    }
+    
+    try:
+        if not os.path.exists(recommendations_file):
+            return summary
+            
+        recs_df = pd.read_csv(recommendations_file)
+        if recs_df.empty:
+            return summary
+            
+        # Converti timestamp
+        recs_df['timestamp'] = pd.to_datetime(recs_df['timestamp'])
+        
+        # Filtra ultimi 7 giorni
+        cutoff_date = datetime.datetime.now() - datetime.timedelta(days=7)
+        recent_recs = recs_df[recs_df['timestamp'] >= cutoff_date]
+        
+        if recent_recs.empty:
+            return summary
+            
+        summary['available'] = True
+        
+        # Analisi frequenza azioni
+        action_counts = recent_recs['segnale'].value_counts()
+        summary['action_frequency'] = {
+            'BUY': int(action_counts.get('BUY', 0)),
+            'SELL': int(action_counts.get('SELL', 0)),
+            'HOLD': int(action_counts.get('HOLD', 0))
+        }
+        
+        # Distribuzione rischi
+        risk_counts = recent_recs['rischio'].value_counts()
+        summary['risk_distribution'] = dict(risk_counts.head())
+        
+        # Focus per asset (più raccomandazioni = più focus)
+        asset_counts = recent_recs['asset'].value_counts()
+        summary['asset_focus'] = dict(asset_counts.head(4))
+        
+        # Pattern temporali (raggruppamento per giorni)
+        recent_recs['day'] = recent_recs['timestamp'].dt.strftime('%A')
+        daily_counts = recent_recs['day'].value_counts()
+        
+        # Insights automatici
+        insights = []
+        
+        # Insight 1: Asset più raccomandato
+        if not asset_counts.empty:
+            top_asset = asset_counts.index[0]
+            top_count = asset_counts.iloc[0]
+            insights.append(f"🎯 Focus principale: {top_asset} ({top_count} raccomandazioni)")
+        
+        # Insight 2: Bias direzionale
+        total_actions = sum(summary['action_frequency'].values())
+        if total_actions > 0:
+            buy_pct = (summary['action_frequency']['BUY'] / total_actions) * 100
+            sell_pct = (summary['action_frequency']['SELL'] / total_actions) * 100
+            
+            if buy_pct > 60:
+                insights.append(f"📈 Bias rialzista: {buy_pct:.0f}% raccomandazioni BUY")
+            elif sell_pct > 60:
+                insights.append(f"📉 Bias ribassista: {sell_pct:.0f}% raccomandazioni SELL")
+            else:
+                insights.append("⚖️ Approccio bilanciato tra BUY e SELL")
+        
+        # Insight 3: Gestione del rischio
+        high_risk_count = len(recent_recs[recent_recs['rischio'].isin(['ALTISSIMO', 'ALTO'])])
+        if high_risk_count > len(recent_recs) * 0.7:
+            insights.append(f"⚠️ Alert: {high_risk_count} raccomandazioni ad alto rischio")
+        else:
+            insights.append(f"✅ Gestione rischio: {high_risk_count} raccomandazioni alto rischio")
+        
+        # Insight 4: Consistenza temporale
+        unique_dates = recent_recs['timestamp'].dt.date.nunique()
+        avg_daily = len(recent_recs) / max(1, unique_dates)
+        insights.append(f"📊 Media: {avg_daily:.1f} raccomandazioni/giorno su {unique_dates} giorni")
+        
+        summary['weekly_insights'] = insights
+        
+        print(f"✅ [WALLET] Riepilogo settimanale generato: {len(insights)} insights")
+        
+    except Exception as e:
+        print(f"❌ [WALLET] Errore generazione riepilogo settimanale: {e}")
+        
+    return summary
+
 # Carica e salva i dati del portafoglio
 wallet_df = load_and_save_wallet_data()
 
@@ -595,6 +787,58 @@ app.layout = html.Div([
         
         html.Div(id="wallet-section", style={"display": "block"})
     ], style={"padding": "20px", "backgroundColor": "#f8f9fa", "borderRadius": "10px"}),
+    
+    # === SEZIONE PERFORMANCE RACCOMANDAZIONI SETTIMANALI ===
+    html.Hr(style={"margin": "40px 0", "border": "2px solid #e67e22"}),
+    
+    html.Div([
+        html.Div([
+            html.H2("📊 Performance Raccomandazioni Settimanali", style={"color": "#2c3e50", "marginBottom": "20px", "display": "inline-block"}),
+            html.Button("🔄 Aggiorna Analisi", id="refresh-weekly-performance", n_clicks=0,
+                       style={"padding": "8px 15px", "backgroundColor": "#e67e22", "color": "white", 
+                             "border": "none", "borderRadius": "5px", "cursor": "pointer", "marginLeft": "20px",
+                             "fontSize": "14px", "fontWeight": "bold"}),
+        ], style={"display": "flex", "alignItems": "center", "justifyContent": "space-between"}),
+        
+        html.Div(id="weekly-performance-status", style={"marginBottom": "10px"}),
+        
+        html.Button("👁️ Mostra/Nascondi Performance Settimanali", id="toggle-weekly-performance", n_clicks=0,
+                   style={"padding": "10px 20px", "backgroundColor": "#e67e22", "color": "white", 
+                         "border": "none", "borderRadius": "5px", "cursor": "pointer", "marginBottom": "20px"}),
+        
+        html.Div([
+            html.P("📈 Questa sezione mostra l'accuracy e le performance delle raccomandazioni degli ultimi 7 giorni basate sui dati salvati.",
+                   style={"fontSize": "12px", "color": "#7f8c8d", "fontStyle": "italic", "marginBottom": "15px"})
+        ]),
+        
+        html.Div(id="weekly-performance-section", style={"display": "block"})
+    ], style={"padding": "20px", "backgroundColor": "#fef5e7", "borderRadius": "10px"}),
+
+    # === SEZIONE RIEPILOGO CONSIGLI SETTIMANALI ===
+    html.Hr(style={"margin": "40px 0", "border": "2px solid #27ae60"}),
+    
+    html.Div([
+        html.Div([
+            html.H2("📈 Riepilogo Consigli Settimanali", style={"color": "#2c3e50", "marginBottom": "20px", "display": "inline-block"}),
+            html.Button("🔄 Aggiorna Riepilogo", id="refresh-weekly-summary", n_clicks=0,
+                       style={"padding": "8px 15px", "backgroundColor": "#27ae60", "color": "white", 
+                             "border": "none", "borderRadius": "5px", "cursor": "pointer", "marginLeft": "20px",
+                             "fontSize": "14px", "fontWeight": "bold"}),
+        ], style={"display": "flex", "alignItems": "center", "justifyContent": "space-between"}),
+        
+        html.Div(id="weekly-summary-status", style={"marginBottom": "10px"}),
+        
+        html.Button("👁️ Mostra/Nascondi Riepilogo Settimanale", id="toggle-weekly-summary", n_clicks=0,
+                   style={"padding": "10px 20px", "backgroundColor": "#27ae60", "color": "white", 
+                         "border": "none", "borderRadius": "5px", "cursor": "pointer", "marginBottom": "20px"}),
+        
+        html.Div([
+            html.P("📋 Questa sezione fornisce un riassunto dei pattern di raccomandazione e trend settimanali del portafoglio.",
+                   style={"fontSize": "12px", "color": "#7f8c8d", "fontStyle": "italic", "marginBottom": "15px"})
+        ]),
+        
+        html.Div(id="weekly-summary-section", style={"display": "block"})
+    ], style={"padding": "20px", "backgroundColor": "#eafaf1", "borderRadius": "10px"}),
     
     # === NUOVA SEZIONE CONSIGLI 555BT ===
     html.Hr(style={"margin": "40px 0", "border": "2px solid #9b59b6"}),
@@ -1070,6 +1314,301 @@ def update_555bt_content(load_clicks, toggle_clicks):
                 html.P(f"📅 Ultimo aggiornamento: {analysis['last_update']}", 
                        style={"fontSize": "12px", "color": "#7f8c8d", "textAlign": "center", "marginTop": "30px"})
             ])
+        )
+    
+    return html.Div(content_sections)
+
+# === CALLBACK TOGGLE WEEKLY PERFORMANCE SECTION ===
+@app.callback(
+    Output("weekly-performance-section", "style"),
+    Input("toggle-weekly-performance", "n_clicks"),
+    State("weekly-performance-section", "style")
+)
+def toggle_weekly_performance_section(n, current_style):
+    if not current_style: 
+        current_style = {"display": "block"}
+    return {"display": "none"} if current_style["display"] == "block" else {"display": "block"}
+
+# === CALLBACK AGGIORNAMENTO WEEKLY PERFORMANCE ===
+@app.callback(
+    Output('weekly-performance-status', 'children'),
+    Input('refresh-weekly-performance', 'n_clicks'),
+    prevent_initial_call=True
+)
+def refresh_weekly_performance_callback(n_clicks):
+    """Aggiorna l'analisi delle performance settimanali"""
+    if n_clicks:
+        analysis = load_weekly_performance_analysis()
+        
+        if analysis['available']:
+            return html.Div([
+                html.Span("✅ Performance settimanali aggiornate!", style={'color': '#27ae60', 'fontWeight': 'bold'}),
+                html.Br(),
+                html.Span(f"📊 {analysis['total_recommendations']} raccomandazioni | {len(analysis['accuracy_by_asset'])} asset analizzati", 
+                         style={'fontSize': '12px', 'color': '#7f8c8d'}),
+                html.Span(f" - {datetime.datetime.now().strftime('%H:%M:%S')}", style={'fontSize': '12px', 'color': '#7f8c8d'})
+            ])
+        else:
+            return html.Div([
+                html.Span("⚠️ Nessun dato performance trovato", style={'color': '#e67e22', 'fontWeight': 'bold'}),
+                html.Br(),
+                html.Span("I file salvataggiwallet non contengono dati sufficienti", style={'fontSize': '12px', 'color': '#7f8c8d'})
+            ])
+    return html.Div()
+
+# === CALLBACK CONTENUTO WEEKLY PERFORMANCE ===
+@app.callback(
+    Output('weekly-performance-section', 'children'),
+    Input('refresh-weekly-performance', 'n_clicks'),
+    Input('toggle-weekly-performance', 'n_clicks')
+)
+def update_weekly_performance_content(refresh_clicks, toggle_clicks):
+    """Aggiorna il contenuto della sezione performance settimanali"""
+    analysis = load_weekly_performance_analysis()
+    
+    if not analysis['available']:
+        return html.Div([
+            html.Div([
+                html.H4("🚫 Nessuna Analisi Performance Disponibile", style={"color": "#e74c3c", "textAlign": "center"}),
+                html.P("Per visualizzare le performance settimanali:", style={"textAlign": "center", "margin": "20px 0"}),
+                html.Ol([
+                    html.Li("1. Assicurati che il sistema di raccomandazioni sia attivo da almeno una settimana"),
+                    html.Li("2. Verifica che esistano i file 'raccomandazioni_storiche.csv' e 'performance_storiche.csv'"),
+                    html.Li("3. Clicca 'Aggiorna Analisi' per ricaricare i dati"),
+                ], style={"textAlign": "left", "margin": "20px auto", "maxWidth": "500px"}),
+                html.P("📁 I file cercati in:", style={"fontWeight": "bold", "marginTop": "30px"}),
+                html.P("salvataggiwallet/", style={"fontFamily": "monospace", "backgroundColor": "#f8f9fa", "padding": "10px", "borderRadius": "5px"})
+            ], style={"padding": "40px", "backgroundColor": "#fef5e7", "borderRadius": "10px", "margin": "20px"})
+        ])
+    
+    content_sections = []
+    
+    # === STATISTICHE GENERALI ===
+    stats = analysis['summary_stats']
+    content_sections.append(
+        html.Div([
+            html.H4("📊 Statistiche Generali (Ultimi 7 giorni)", style={"color": "#2c3e50", "marginBottom": "15px"}),
+            html.Div([
+                html.Div([
+                    html.H5(str(stats.get('total_recommendations', 0)), style={"color": "#e67e22", "fontSize": "32px", "margin": "0"}),
+                    html.P("Raccomandazioni Totali", style={"fontSize": "14px", "color": "#7f8c8d", "margin": "5px 0"})
+                ], style={"textAlign": "center", "padding": "15px", "backgroundColor": "#fff", "borderRadius": "8px", "border": "1px solid #e67e22", "width": "23%", "display": "inline-block", "margin": "0 1%"}),
+                
+                html.Div([
+                    html.H5(str(stats.get('unique_assets', 0)), style={"color": "#3498db", "fontSize": "32px", "margin": "0"}),
+                    html.P("Asset Analizzati", style={"fontSize": "14px", "color": "#7f8c8d", "margin": "5px 0"})
+                ], style={"textAlign": "center", "padding": "15px", "backgroundColor": "#fff", "borderRadius": "8px", "border": "1px solid #3498db", "width": "23%", "display": "inline-block", "margin": "0 1%"}),
+                
+                html.Div([
+                    html.H5(f"{stats.get('avg_daily_recommendations', 0)}", style={"color": "#9b59b6", "fontSize": "32px", "margin": "0"}),
+                    html.P("Media/Giorno", style={"fontSize": "14px", "color": "#7f8c8d", "margin": "5px 0"})
+                ], style={"textAlign": "center", "padding": "15px", "backgroundColor": "#fff", "borderRadius": "8px", "border": "1px solid #9b59b6", "width": "23%", "display": "inline-block", "margin": "0 1%"}),
+                
+                html.Div([
+                    html.H5(str(stats.get('high_risk_recommendations', 0)), style={"color": "#e74c3c", "fontSize": "32px", "margin": "0"}),
+                    html.P("Alto Rischio", style={"fontSize": "14px", "color": "#7f8c8d", "margin": "5px 0"})
+                ], style={"textAlign": "center", "padding": "15px", "backgroundColor": "#fff", "borderRadius": "8px", "border": "1px solid #e74c3c", "width": "23%", "display": "inline-block", "margin": "0 1%"})
+            ], style={"marginBottom": "20px"})
+        ], style={"marginBottom": "30px"})
+    )
+    
+    # === TABELLA ACCURACY PER ASSET ===
+    if analysis['accuracy_by_asset']:
+        accuracy_data = []
+        for asset, metrics in analysis['accuracy_by_asset'].items():
+            accuracy_data.append({
+                "Asset": asset,
+                "🎯 Segnali BUY": metrics['buy_signals'],
+                "🔴 Segnali SELL": metrics['sell_signals'], 
+                "📊 Totale": metrics['total_signals'],
+                "📈 Perf. Media 1w": f"{metrics['avg_performance_1w']}%",
+                "🎭 Consistenza": f"{metrics['consistency_score']:.2f}",
+                "🕒 Ultima Azione": metrics['last_action'][:20] + "..." if len(str(metrics['last_action'])) > 20 else metrics['last_action']
+            })
+        
+        content_sections.append(
+            html.Div([
+                html.H4("📈 Performance per Asset (Ultimi 7 giorni)", style={"color": "#2c3e50", "marginBottom": "15px"}),
+                dash_table.DataTable(
+                    data=accuracy_data,
+                    columns=[
+                        {"name": col, "id": col} for col in accuracy_data[0].keys()
+                    ],
+                    style_cell={
+                        'textAlign': 'center',
+                        'padding': '10px',
+                        'fontFamily': 'Arial',
+                        'fontSize': '12px'
+                    },
+                    style_header={
+                        'backgroundColor': '#e67e22',
+                        'color': 'white',
+                        'fontWeight': 'bold',
+                        'textAlign': 'center'
+                    },
+                    style_data_conditional=[
+                        {
+                            'if': {'filter_query': '{📈 Perf. Media 1w} contains "+"'},
+                            'backgroundColor': '#d5f4e6',
+                            'color': '#27ae60'
+                        },
+                        {
+                            'if': {'filter_query': '{📈 Perf. Media 1w} contains "-"'},
+                            'backgroundColor': '#fadbd8', 
+                            'color': '#e74c3c'
+                        }
+                    ],
+                    page_size=10
+                )
+            ], style={"marginBottom": "30px"})
+        )
+    
+    # === INFO AGGIORNAMENTO ===
+    content_sections.append(
+        html.Div([
+            html.P(f"📅 Ultimo aggiornamento: {stats.get('last_update', 'N/A')}", 
+                   style={"fontSize": "12px", "color": "#7f8c8d", "textAlign": "center", "marginTop": "20px"}),
+            html.P(f"🔄 I dati vengono aggiornati automaticamente ogni volta che viene eseguita un'analisi del portafoglio", 
+                   style={"fontSize": "11px", "color": "#95a5a6", "textAlign": "center", "fontStyle": "italic"})
+        ])
+    )
+    
+    return html.Div(content_sections)
+
+# === CALLBACK TOGGLE WEEKLY SUMMARY SECTION ===
+@app.callback(
+    Output("weekly-summary-section", "style"),
+    Input("toggle-weekly-summary", "n_clicks"),
+    State("weekly-summary-section", "style")
+)
+def toggle_weekly_summary_section(n, current_style):
+    if not current_style: 
+        current_style = {"display": "block"}
+    return {"display": "none"} if current_style["display"] == "block" else {"display": "block"}
+
+# === CALLBACK AGGIORNAMENTO WEEKLY SUMMARY ===
+@app.callback(
+    Output('weekly-summary-status', 'children'),
+    Input('refresh-weekly-summary', 'n_clicks'),
+    prevent_initial_call=True
+)
+def refresh_weekly_summary_callback(n_clicks):
+    """Aggiorna il riepilogo settimanale"""
+    if n_clicks:
+        summary = load_weekly_summary_analysis()
+        
+        if summary['available']:
+            return html.Div([
+                html.Span("✅ Riepilogo settimanale aggiornato!", style={'color': '#27ae60', 'fontWeight': 'bold'}),
+                html.Br(),
+                html.Span(f"🎯 {len(summary['weekly_insights'])} insights | {len(summary['asset_focus'])} asset principali", 
+                         style={'fontSize': '12px', 'color': '#7f8c8d'}),
+                html.Span(f" - {datetime.datetime.now().strftime('%H:%M:%S')}", style={'fontSize': '12px', 'color': '#7f8c8d'})
+            ])
+        else:
+            return html.Div([
+                html.Span("⚠️ Nessun dato riepilogo trovato", style={'color': '#e67e22', 'fontWeight': 'bold'}),
+                html.Br(),
+                html.Span("Dati insufficienti per generare il riepilogo", style={'fontSize': '12px', 'color': '#7f8c8d'})
+            ])
+    return html.Div()
+
+# === CALLBACK CONTENUTO WEEKLY SUMMARY ===
+@app.callback(
+    Output('weekly-summary-section', 'children'),
+    Input('refresh-weekly-summary', 'n_clicks'),
+    Input('toggle-weekly-summary', 'n_clicks')
+)
+def update_weekly_summary_content(refresh_clicks, toggle_clicks):
+    """Aggiorna il contenuto del riepilogo settimanale"""
+    summary = load_weekly_summary_analysis()
+    
+    if not summary['available']:
+        return html.Div([
+            html.Div([
+                html.H4("🚫 Nessun Riepilogo Disponibile", style={"color": "#e74c3c", "textAlign": "center"}),
+                html.P("Il sistema necessita di almeno una settimana di dati per generare insights significativi.", 
+                       style={"textAlign": "center", "margin": "20px 0", "color": "#7f8c8d"}),
+                html.P("📊 Dati richiesti: raccomandazioni_storiche.csv", 
+                       style={"textAlign": "center", "fontFamily": "monospace", "backgroundColor": "#f8f9fa", "padding": "10px", "borderRadius": "5px"})
+            ], style={"padding": "40px", "backgroundColor": "#eafaf1", "borderRadius": "10px", "margin": "20px"})
+        ])
+    
+    content_sections = []
+    
+    # === INSIGHTS AUTOMATICI ===
+    if summary['weekly_insights']:
+        content_sections.append(
+            html.Div([
+                html.H4("🎯 Insights Settimanali", style={"color": "#2c3e50", "marginBottom": "15px"}),
+                html.Div([
+                    html.Div([
+                        html.P(insight, style={"margin": "10px 0", "fontSize": "14px", "color": "#2c3e50"})
+                    ], style={"padding": "15px", "backgroundColor": "#fff", "borderRadius": "8px", 
+                             "border": "1px solid #27ae60", "margin": "5px 0", "boxShadow": "0 1px 3px rgba(0,0,0,0.1)"}) 
+                    for insight in summary['weekly_insights']
+                ])
+            ], style={"marginBottom": "30px"})
+        )
+    
+    # === DISTRIBUZIONE AZIONI ===
+    if summary['action_frequency']:
+        actions = summary['action_frequency']
+        total_actions = sum(actions.values())
+        
+        if total_actions > 0:
+            content_sections.append(
+                html.Div([
+                    html.H4("⚖️ Distribuzione Azioni (Ultimi 7 giorni)", style={"color": "#2c3e50", "marginBottom": "15px"}),
+                    html.Div([
+                        html.Div([
+                            html.H5(f"{actions['BUY']}", style={"color": "#27ae60", "fontSize": "24px", "margin": "0"}),
+                            html.P("🟢 BUY", style={"fontSize": "12px", "color": "#7f8c8d", "margin": "5px 0"}),
+                            html.P(f"{(actions['BUY']/total_actions)*100:.1f}%", style={"fontSize": "11px", "color": "#27ae60", "fontWeight": "bold"})
+                        ], style={"textAlign": "center", "padding": "15px", "backgroundColor": "#d5f4e6", "borderRadius": "8px", "width": "30%", "display": "inline-block", "margin": "0 1.5%"}),
+                        
+                        html.Div([
+                            html.H5(f"{actions['SELL']}", style={"color": "#e74c3c", "fontSize": "24px", "margin": "0"}),
+                            html.P("🔴 SELL", style={"fontSize": "12px", "color": "#7f8c8d", "margin": "5px 0"}),
+                            html.P(f"{(actions['SELL']/total_actions)*100:.1f}%", style={"fontSize": "11px", "color": "#e74c3c", "fontWeight": "bold"})
+                        ], style={"textAlign": "center", "padding": "15px", "backgroundColor": "#fadbd8", "borderRadius": "8px", "width": "30%", "display": "inline-block", "margin": "0 1.5%"}),
+                        
+                        html.Div([
+                            html.H5(f"{actions['HOLD']}", style={"color": "#f39c12", "fontSize": "24px", "margin": "0"}),
+                            html.P("🟡 HOLD", style={"fontSize": "12px", "color": "#7f8c8d", "margin": "5px 0"}),
+                            html.P(f"{(actions['HOLD']/total_actions)*100:.1f}%", style={"fontSize": "11px", "color": "#f39c12", "fontWeight": "bold"})
+                        ], style={"textAlign": "center", "padding": "15px", "backgroundColor": "#fdeaa7", "borderRadius": "8px", "width": "30%", "display": "inline-block", "margin": "0 1.5%"})
+                    ], style={"marginBottom": "20px"})
+                ], style={"marginBottom": "30px"})
+            )
+    
+    # === FOCUS ASSET ===
+    if summary['asset_focus']:
+        content_sections.append(
+            html.Div([
+                html.H4("🎯 Focus Asset (Più Raccomandati)", style={"color": "#2c3e50", "marginBottom": "15px"}),
+                html.Div([
+                    html.Div([
+                        html.H6(asset, style={"color": "#2c3e50", "margin": "5px 0", "fontSize": "14px", "fontWeight": "bold"}),
+                        html.P(f"{count} raccomandazioni", style={"fontSize": "12px", "color": "#7f8c8d", "margin": "0"})
+                    ], style={"padding": "12px", "backgroundColor": "#fff", "borderRadius": "6px", "border": "1px solid #ddd", "margin": "5px", "width": "22%", "display": "inline-block"})
+                    for asset, count in list(summary['asset_focus'].items())[:4]
+                ])
+            ], style={"marginBottom": "30px"})
+        )
+    
+    # === DISTRIBUZIONE RISCHI ===
+    if summary['risk_distribution']:
+        content_sections.append(
+            html.Div([
+                html.H4("⚠️ Distribuzione Livelli di Rischio", style={"color": "#2c3e50", "marginBottom": "15px"}),
+                html.Div([
+                    html.Div([
+                        html.P(f"📊 {risk_level}: {count}", style={"margin": "8px 0", "fontSize": "13px", "color": "#34495e"})
+                    ], style={"padding": "10px", "backgroundColor": "#f8f9fa", "borderRadius": "5px", "margin": "3px", "width": "48%", "display": "inline-block"})
+                    for risk_level, count in summary['risk_distribution'].items()
+                ])
+            ], style={"marginBottom": "30px"})
         )
     
     return html.Div(content_sections)
