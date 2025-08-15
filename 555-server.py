@@ -49,6 +49,70 @@ except ImportError:
 
 print("🚫 [TWITTER] Funzionalità Twitter/X.com completamente disabilitata")
 
+# === TELEGRAM CONFIG ===
+TELEGRAM_TOKEN = "8396764345:AAH2aFy5lLAnr4xf-9FU91cWkYIrdG1f7hs"
+TELEGRAM_CHAT_ID = "@abkllr"
+
+# === CONTROLLO FUNZIONI OTTIMIZZATE PER RENDER ===
+FEATURES_ENABLED = {
+    "morning_news": True,          # Rassegna stampa mattutina (09:00)
+    "daily_report": True,          # Report giornaliero (12:55) - con elaborazione sequenziale
+    "sequential_processing": True, # Elaborazione a turni per gestire RAM
+    "memory_cleanup": True        # Pulizia memoria tra le elaborazioni
+}
+
+def is_feature_enabled(feature_name):
+    """Controlla se una funzione è abilitata"""
+    return FEATURES_ENABLED.get(feature_name, True)
+
+# === FUNZIONE INVIO TELEGRAM ===
+def invia_messaggio_telegram(msg):
+    """Invia messaggio Telegram con gestione memoria ottimizzata"""
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    
+    print(f"📤 [RENDER-TELEGRAM] Invio messaggio ({len(msg)} caratteri)")
+    
+    try:
+        # Pulisci messaggio
+        clean_msg = msg.replace('```', '`').replace('**', '*')
+        
+        # Gestione lunghezza
+        if len(clean_msg) > 4000:
+            cut_point = clean_msg.rfind('\n', 0, 3900)
+            if cut_point == -1:
+                cut_point = 3900
+            clean_msg = clean_msg[:cut_point] + "\n\n📱 Continua su Dashboard"
+        
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": clean_msg,
+            "parse_mode": "Markdown"
+        }
+        
+        r = requests.post(url, data=payload, timeout=10)
+        
+        if r.status_code == 200:
+            print(f"✅ [RENDER-TELEGRAM] Messaggio inviato")
+            return True
+        else:
+            print(f"❌ [RENDER-TELEGRAM] Errore HTTP {r.status_code}")
+            # Fallback senza markdown
+            fallback_payload = {
+                "chat_id": TELEGRAM_CHAT_ID,
+                "text": clean_msg.replace('*', '').replace('_', ''),
+                "parse_mode": None
+            }
+            r_fallback = requests.post(url, data=fallback_payload, timeout=10)
+            return r_fallback.status_code == 200
+            
+    except Exception as e:
+        print(f"❌ [RENDER-TELEGRAM] Errore: {e}")
+        return False
+    finally:
+        # Pulizia memoria
+        import gc
+        gc.collect()
+
 # === FUNZIONE PER CREARE CARTELLE NECESSARIE ===
 def ensure_directories():
     """Crea automaticamente le cartelle necessarie se non esistono"""
@@ -2422,16 +2486,17 @@ def download_eventi():
     df["Ordine"] = df["Impatto"].map(impatto_ordine)
     df.sort_values(by="Ordine", inplace=True)
     df.drop(columns=["Ordine"], inplace=True)
-
-    # === Invia il messaggio completo degli eventi (stesso della funzione genera_messaggio_eventi) ===
-    text_msg = genera_messaggio_eventi()
-
-    # === Invia messaggio Telegram con il contenuto completo ===
+    
+    # === SALVATAGGIO SOLO PER SINCRONIZZAZIONE - NESSUN TELEGRAM ===
+    # Salva nella cartella salvataggi per sync_system.py
     try:
-        invia_messaggio_telegram(text_msg)
-        print("✅ Messaggio Telegram calendario inviato con successo!")
+        import datetime
+        calendario_path = os.path.join('salvataggi', 'calendario_eventi.csv')
+        df['Data_Export'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        df.to_csv(calendario_path, index=False, encoding="utf-8-sig")
+        print("📅 CSV Calendario salvato in /salvataggi per sincronizzazione")
     except Exception as e:
-        print(f"❌ Errore invio messaggio Telegram calendario: {e}")
+        print(f"❌ Errore salvataggio calendario: {e}")
 
     # === Risposta HTTP: download CSV per browser ===
     buffer_csv = io.StringIO()
@@ -3821,25 +3886,10 @@ def optimize_csv_export(df, max_records=None):
 app.layout = html.Div([
     # Header principale con layout coerente
     html.Div([
-        # Pulsanti a sinistra
-        html.Div([
-            html.Button("📤 Invia Rapporto", id="send-unified-report-button", 
-                       style={'padding': '10px 15px', 'backgroundColor': '#28a745', 'color': 'white', 
-                             'border': 'none', 'borderRadius': '5px', 'cursor': 'pointer', 'marginRight': '10px',
-                             'fontWeight': 'bold', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)', 'transition': 'all 0.3s ease'}),
-            html.Button("📊 Invia Backtest", id="send-backtest-button", 
-                       style={'padding': '10px 15px', 'backgroundColor': '#6f42c1', 'color': 'white', 
-                             'border': 'none', 'borderRadius': '5px', 'cursor': 'pointer', 'marginRight': '10px',
-                             'fontWeight': 'bold', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)', 'transition': 'all 0.3s ease'}),
-            html.Button("🌅 Invia Rassegna Stampa", id="send-morning-briefing-button", 
-                       style={'padding': '10px 15px', 'backgroundColor': '#17a2b8', 'color': 'white', 
-                             'border': 'none', 'borderRadius': '5px', 'cursor': 'pointer',
-                             'fontWeight': 'bold', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)', 'transition': 'all 0.3s ease'}),
-        ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'flex-start', 'flex': '1'}),
         
         # Titolo al centro
         html.H1("🚀 Dashboard Finanziaria Completa", 
-               style={'margin': '0', 'textAlign': 'center', 'flex': '2', 'color': '#2c3e50'}),
+               style={'margin': '0', 'textAlign': 'center', 'flex': '1', 'color': '#2c3e50'}),
         
         # Pulsante Canale Telegram a destra
         html.Div([
@@ -3867,7 +3917,7 @@ app.layout = html.Div([
                 target="_blank",  # Apre in nuova scheda
                 style={'textDecoration': 'none'}
             )
-        ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'flex-end', 'flex': '1'}),
+        ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'center', 'flex': '1'}),
     ], style={'display': 'flex', 'alignItems': 'center', 'padding': '20px', 'backgroundColor': '#e8f5e8', 
              'borderBottom': '2px solid #28a745', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'}),
 
@@ -4721,281 +4771,166 @@ def open_main_telegram_channel(n_clicks):
 
 from dash import no_update
 
-@app.callback(
-    Output("send-backtest-button", "n_clicks"),
-    Input("send-backtest-button", "n_clicks"),
-    prevent_initial_call=True
-)
-def send_backtest_manual(n_clicks):
-    """Esegue 555bt.py per generare l'analisi e invia il backtest con override temporaneo"""
-    if n_clicks:
-        # Usa override temporaneo per garantire l'invio anche se la funzione è disabilitata
-        def _send_backtest():
-            try:
-                import subprocess
-                import pytz
-                italy_tz = pytz.timezone('Europe/Rome')
-                now = datetime.datetime.now(italy_tz)
-                
-                print(f"📊 [BACKTEST] Avvio analisi backtest alle {now.strftime('%H:%M:%S')}")
-                
-                # === FASE 1: ATTIVAZIONE DI TUTTI GLI INDICATORI E SEGNALI ===
-                print("🔧 [BACKTEST] Attivazione di tutti gli indicatori e segnali...")
-                original_features_state = {}
-                try:
-                    # Salva stato originale e abilita TUTTO per il backtest
-                    for feature_name in FEATURES_ENABLED.keys():
-                        original_features_state[feature_name] = FEATURES_ENABLED[feature_name]
-                        if not FEATURES_ENABLED[feature_name]:
-                            enable_feature_temporarily(feature_name)
-                            print(f"   🟢 Attivato: {feature_name}")
-                    
-                    # GENERA E SALVA I FILE CSV CON TUTTI GLI INDICATORI ATTIVI
-                    print("📊 [BACKTEST] Generazione file CSV con tutti gli indicatori attivi...")
-                    
-                    # 1. Genera segnali tecnici completi
-                    df_all_indicators = get_all_signals_summary('1d')
-                    if not df_all_indicators.empty:
-                        indicators_path = os.path.join('salvataggi', 'segnali_tecnici.csv')
-                        df_all_indicators['Data'] = now.strftime('%Y-%m-%d %H:%M:%S')
-                        df_all_indicators['Timeframe'] = '1d'
-                        df_all_indicators.to_csv(indicators_path, index=False)
-                        print(f"   📈 Salvato: {indicators_path} ({len(df_all_indicators)} asset, {len(df_all_indicators.columns)-2} indicatori)")
-                    
-                    # 2. Genera previsioni ML complete
-                    print("   🤖 Generazione previsioni ML...")
-                    all_assets = {**symbols, "Bitcoin": "BTC"}
-                    ml_results = []
-                    
-                    for model_name in ["Random Forest", "Gradient Boosting", "XGBoost"]:
-                        if model_name in models:
-                            model_inst = models[model_name][0]
-                            for asset_name, code in all_assets.items():
-                                try:
-                                    df_i = load_crypto_data(code) if asset_name == "Bitcoin" else load_data_fred(code, start, end)
-                                    if df_i.empty:
-                                        continue
-                                    df_i = add_features(df_i, 5)
-                                    prob, acc = train_model(model_inst, df_i)
-                                    
-                                    if prob >= 0.75:
-                                        signal = "BUY"
-                                    elif prob <= 0.25:
-                                        signal = "SELL"
-                                    else:
-                                        signal = "HOLD"
-                                    
-                                    ml_results.append({
-                                        "Modello": model_name,
-                                        "Asset": asset_name,
-                                        "Probabilità": round(prob * 100, 2),
-                                        "Accuratezza": round(acc * 100, 2),
-                                        "Orizzonte": "1 settimana",
-                                        "Data": now.strftime('%Y-%m-%d %H:%M:%S')
-                                    })
-                                except Exception as e:
-                                    print(f"     ⚠️ Errore {model_name}-{asset_name}: {e}")
-                                    continue
-                    
-                    if ml_results:
-                        ml_df = pd.DataFrame(ml_results)
-                        ml_path = os.path.join('salvataggi', 'previsioni_ml.csv')
-                        ml_df.to_csv(ml_path, index=False)
-                        print(f"   🤖 Salvato: {ml_path} ({len(ml_results)} previsioni)")
-                    
-                    print("✅ [BACKTEST] Tutti gli indicatori attivati e file CSV aggiornati")
-                    
-                except Exception as e:
-                    print(f"⚠️ [BACKTEST] Errore nell'attivazione indicatori: {e}")
-                
-                # === FASE 2: ESECUZIONE DI PROVABT.PY ===
-                # Esegui provabt.py nella cartella ciao (se esiste, altrimenti usa 555bt.py dalla cartella corrente)
-                provabt_path = os.path.join('C:\\Users\\valen\\ciao', 'provabt.py')
-                bt_path_555 = os.path.join('C:\\Users\\valen\\555', '555bt.py')
-                
-                backtest_script = None
-                if os.path.exists(provabt_path):
-                    backtest_script = provabt_path
-                    script_name = 'provabt.py'
-                elif os.path.exists(bt_path_555):
-                    backtest_script = bt_path_555
-                    script_name = '555bt.py'
-                
-                if backtest_script:
-                    print(f"🔄 [BACKTEST] Esecuzione di {script_name}...")
-                    
-                    # Esegui lo script di backtest e attendi il completamento
-                    result = subprocess.run(
-                        ['python', backtest_script],
-                        cwd='C:\\Users\\valen\\555' if '555bt.py' in backtest_script else 'C:\\Users\\valen\\ciao',  # Cambia directory di lavoro
-                        capture_output=True,
-                        text=True,
-                        encoding='utf-8',  # Fix encoding issue
-                        errors='replace',  # Handle encoding errors gracefully
-                        timeout=300  # Timeout di 5 minuti
-                    )
-                    
-                    if result.returncode == 0:
-                        print(f"✅ [BACKTEST] {script_name} completato con successo")
-                        print(f"📝 [BACKTEST] Output: {result.stdout[-200:]}...")  # Mostra ultimi 200 caratteri
-                    else:
-                        print(f"❌ [BACKTEST] {script_name} fallito con codice: {result.returncode}")
-                        print(f"📝 [BACKTEST] Errore: {result.stderr}")
-                else:
-                    print(f"❌ [BACKTEST] Nessuno script di backtest trovato (cercati: provabt.py, 555bt.py)")
-                
-                # === FASE 3: LETTURA E INVIO DEL RISULTATO ===
-                # Leggi il file analysis_text.txt
-                analysis_file = os.path.join('salvataggi', 'analysis_text.txt')
-                
-                if os.path.exists(analysis_file):
-                    with open(analysis_file, 'r', encoding='utf-8') as f:
-                        analysis_content = f.read().strip()
-                    
-                    if analysis_content:
-                        print(f"📊 [BACKTEST] Contenuto analysis_text.txt: {len(analysis_content)} caratteri")
-                        print(f"📊 [BACKTEST] Prime 200 caratteri: {analysis_content[:200]}...")
-                        
-                        # Verifica se è lunedì e aggiungi il riassunto settimanale
-                        if now.weekday() == 0:  # 0 = Lunedì
-                            print(f"📅 [BACKTEST] È lunedì - aggiunta del riassunto settimanale")
-                            try:
-                                weekly_summary = generate_weekly_backtest_summary()
-                                analysis_content += f"\n\n{weekly_summary}"
-                                print(f"✅ [BACKTEST] Riassunto settimanale aggiunto ({len(weekly_summary)} caratteri)")
-                            except Exception as e:
-                                print(f"⚠️ [BACKTEST] Errore nel generare riassunto settimanale: {e}")
-                                analysis_content += "\n\n📈 === RIASSUNTO SETTIMANALE ===\n❌ Errore nella generazione del riassunto settimanale"
-                        
-                        # Prepara il messaggio con header - gestione migliorata
-                        backtest_message = f"📊 *BACKTEST MANUALE - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{analysis_content}"
-                        
-                        # Gestione intelligente della lunghezza messaggio
-                        if len(backtest_message) > 4000:
-                            print(f"⚠️ [BACKTEST] Messaggio troppo lungo ({len(backtest_message)} caratteri), suddivisione...")
-                            
-                            # Dividi in più messaggi se necessario
-                            header = f"📊 *BACKTEST MANUALE - {now.strftime('%d/%m/%Y %H:%M')}*\n\n"
-                            content_chunks = [analysis_content[i:i+3500] for i in range(0, len(analysis_content), 3500)]
-                            
-                            for i, chunk in enumerate(content_chunks):
-                                if i == 0:
-                                    message = header + chunk
-                                else:
-                                    message = f"📊 *BACKTEST (parte {i+1})*\n\n{chunk}"
-                                
-                                # Rimuovi link Telegram per messaggio più pulito
-                                # message += "\n\n💬 t.me/+DXd9cQfxRchmZmE0"
-                                
-                                invia_messaggio_telegram(message)
-                                print(f"✅ [BACKTEST] Parte {i+1}/{len(content_chunks)} inviata ({len(message)} caratteri)")
-                                
-                                if i < len(content_chunks) - 1:  # Pausa tra i messaggi tranne l'ultimo
-                                    time.sleep(2)
-                        else:
-                            # Messaggio singolo senza footer per pulizia
-                            # backtest_message += "\n\n💬 t.me/+DXd9cQfxRchmZmE0"
-                            send_with_temporary_override("backtest_reports", invia_messaggio_telegram, backtest_message)
-                            print(f"✅ [BACKTEST] Backtest inviato con successo ({len(backtest_message)} caratteri)")
-                    else:
-                        error_message = f"⚠️ *BACKTEST - {now.strftime('%d/%m/%Y %H:%M')}*\n\nIl file analysis_text.txt è vuoto."
-                        invia_messaggio_telegram(error_message)
-                        print("⚠️ [BACKTEST] File analysis_text.txt è vuoto")
-                else:
-                    error_message = f"❌ *BACKTEST - {now.strftime('%d/%m/%Y %H:%M')}*\n\nFile analysis_text.txt non trovato."
-                    invia_messaggio_telegram(error_message)
-                    print("❌ [BACKTEST] File analysis_text.txt non trovato")
-                
-                # === FASE 4: SPEGNIMENTO DEL PROGRAMMA DI BACKTEST E INDICATORI ===
-                print("🔧 [BACKTEST] Spegnimento del programma di backtest e indicatori...")
-                try:
-                    # Termina eventuali processi di backtest ancora attivi
-                    if backtest_script:
-                        script_name_only = os.path.basename(backtest_script).replace('.py', '')
-                        try:
-                            # Usa taskkill per terminare eventuali processi Python che eseguono lo script
-                            subprocess.run([
-                                'taskkill', '/F', '/IM', 'python.exe', '/FI', f'WINDOWTITLE eq {script_name_only}*'
-                            ], capture_output=True, timeout=10)
-                            print(f"   🔴 Terminato processo: {script_name_only}")
-                        except Exception as e:
-                            print(f"   ⚠️ Impossibile terminare processo {script_name_only}: {e}")
-                    
-                    # Disabilita tutte le funzioni degli indicatori
-                    for feature_name in FEATURES_ENABLED.keys():
-                        if FEATURES_ENABLED[feature_name]:
-                            disable_feature(feature_name)
-                            print(f"   🔴 Disattivato: {feature_name}")
-                    
-                    print("✅ [BACKTEST] Tutti gli indicatori e segnali sono stati spenti")
-                    print("✅ [BACKTEST] Programma di backtest terminato")
-                    
-                except Exception as e:
-                    print(f"⚠️ [BACKTEST] Errore nello spegnimento: {e}")
-                
-                print(f"🏁 [BACKTEST] Processo completo terminato alle {now.strftime('%H:%M:%S')}")
-                    
-            except Exception as e:
-                print(f"❌ [BACKTEST] Errore nell'invio del backtest: {e}")
-                # Anche in caso di errore, spegni tutto
-                print("🔧 [BACKTEST-ERROR] Spegnimento di emergenza...")
-                try:
-                    for feature_name in FEATURES_ENABLED.keys():
-                        disable_feature(feature_name)
-                    print("✅ [BACKTEST-ERROR] Spegnimento di emergenza completato")
-                except Exception as cleanup_error:
-                    print(f"❌ [BACKTEST-ERROR] Errore nello spegnimento di emergenza: {cleanup_error}")
+# Callback per pulsante manuale "📊 Invia Backtest" RIMOSSO
+# Il backtest rimane disponibile solo tramite scheduling automatico
+
+# Callback per pulsante manuale "📤 Invia Rapporto" RIMOSSO
+# Il rapporto unificato rimane disponibile solo tramite scheduling automatico
+
+# Callback per pulsante manuale "🌅 Invia Rassegna Stampa" RIMOSSO
+# La rassegna stampa rimane disponibile solo tramite scheduling automatico alle 09:00
+
+def process_indicators_sequentially(assets_list, timeframe='1d'):
+    """Elabora indicatori tecnici in modo sequenziale per gestire la RAM"""
+    import gc
+    processed_results = []
+    
+    print(f"⚙️ [SEQUENTIAL-INDICATORS] Elaborazione sequenziale di {len(assets_list)} asset...")
+    
+    for i, (asset_name, asset_code, data_type) in enumerate(assets_list, 1):
+        try:
+            print(f"   📊 [{i}/{len(assets_list)}] Elaborando {asset_name}...")
+            
+            # Carica dati per singolo asset
+            if data_type == "crypto":
+                df_asset = load_crypto_data(asset_code)
+                if not df_asset.empty:
+                    start_date = datetime.datetime.now() - datetime.timedelta(days=365)
+                    df_asset = df_asset[df_asset.index >= start_date]
+            else:  # FRED data
+                end_date = datetime.datetime.today()
+                start_date = get_start_date(timeframe)
+                df_asset = load_data_fred(asset_code, start_date, end_date)
+            
+            if df_asset.empty:
+                print(f"     ⚠️ Dati vuoti per {asset_name}, skip")
+                continue
+            
+            # Calcola indicatori per questo asset
+            indicators = calculate_technical_indicators(df_asset)
+            
+            # Prepara row per risultato
+            row = {'Asset': asset_name}
+            for key, signal in indicators.items():
+                last_signal = signal_text(signal[signal != 0].iloc[-1]) if not signal[signal != 0].empty else 'Hold'
+                row[key] = last_signal
+            
+            processed_results.append(row)
+            print(f"     ✅ {asset_name} completato ({len(indicators)} indicatori)")
+            
+            # Pulizia memoria dopo ogni asset
+            del df_asset, indicators
+            gc.collect()
+            
+            # Piccola pausa per evitare overload
+            if i < len(assets_list):
+                time.sleep(0.5)
+            
+        except Exception as e:
+            print(f"     ❌ Errore elaborando {asset_name}: {e}")
+            continue
+    
+    # Pulizia finale
+    gc.collect()
+    print(f"✅ [SEQUENTIAL-INDICATORS] Elaborazione completata: {len(processed_results)} asset processati")
+    
+    return pd.DataFrame(processed_results)
+
+def process_ml_models_sequentially(assets_list, models_list, horizon=5):
+    """Elabora modelli ML in modo sequenziale per gestire la RAM"""
+    import gc
+    all_ml_results = []
+    
+    print(f"🤖 [SEQUENTIAL-ML] Elaborazione sequenziale: {len(models_list)} modelli x {len(assets_list)} asset...")
+    
+    for model_idx, model_name in enumerate(models_list, 1):
+        print(f"   🧠 [{model_idx}/{len(models_list)}] Modello: {model_name}")
         
-        _send_backtest()
-    
-    return no_update
-
-@app.callback(
-    Output("send-unified-report-button", "n_clicks"),
-    Input("send-unified-report-button", "n_clicks"),
-    prevent_initial_call=True
-)
-def send_unified_report_manual(n_clicks):
-    """Callback per inviare il rapporto unificato manualmente."""
-    if n_clicks:
-        try:
-            print("🚀 [MANUAL] Richiesta di invio manuale ricevuta. Chiamo la funzione unificata...")
-            # Chiama la funzione unificata per generare e inviare il rapporto manuale
-            generate_unified_report(report_type="manual")
-        except Exception as e:
-            print(f"❌ [MANUAL] Errore critico durante l'avvio del report manuale: {e}")
-    
-    return no_update
-
-@app.callback(
-    Output("send-morning-briefing-button", "n_clicks"),
-    Input("send-morning-briefing-button", "n_clicks"),
-    prevent_initial_call=True
-)
-def send_morning_briefing_manual(n_clicks):
-    """Callback per inviare la rassegna stampa mattutina manualmente."""
-    if n_clicks:
-        try:
-            print("🌅 [MANUAL] Richiesta di invio manuale rassegna stampa ricevuta...")
-            # Usa override temporaneo per garantire l'invio anche se la funzione è disabilitata
-            def _send_morning_briefing():
-                success = generate_morning_news_briefing()
-                if success:
-                    print("✅ [MANUAL] Rassegna stampa mattutina inviata con successo")
+        if model_name not in models:
+            continue
+            
+        model_inst = models[model_name][0]
+        model_results = []
+        
+        for asset_idx, (asset_name, asset_code, data_type) in enumerate(assets_list, 1):
+            try:
+                print(f"     📊 [{model_name}] Asset {asset_idx}/{len(assets_list)}: {asset_name}")
+                
+                # Carica dati per singolo asset
+                if data_type == "crypto":
+                    df_asset = load_crypto_data(asset_code)
+                    if not df_asset.empty:
+                        start_date = datetime.datetime.now() - datetime.timedelta(days=365)
+                        df_asset = df_asset[df_asset.index >= start_date]
+                else:  # FRED data
+                    end_date = datetime.datetime.today()
+                    start_date = end_date - datetime.timedelta(days=730)  # 2 anni di dati
+                    df_asset = load_data_fred(asset_code, start_date, end_date)
+                
+                if df_asset.empty:
+                    print(f"       ⚠️ Dati vuoti per {asset_name}, skip")
+                    continue
+                
+                # Aggiungi features ML
+                df_asset = add_features(df_asset, horizon)
+                
+                # Addestra modello su questo asset
+                prob, acc = train_model(model_inst, df_asset)
+                
+                # Determina segnale
+                if prob >= 0.75:
+                    signal = "BUY"
+                elif prob <= 0.25:
+                    signal = "SELL"
+                elif prob >= 0.6:
+                    signal = "WEAK BUY"
+                elif prob <= 0.4:
+                    signal = "WEAK SELL"
                 else:
-                    print("❌ [MANUAL] Rassegna stampa mattutina fallita")
-                return success
-            
-            # Chiama con override temporaneo
-            send_with_temporary_override("manual_reports", _send_morning_briefing)
-            
-        except Exception as e:
-            print(f"❌ [MANUAL] Errore critico durante l'invio manuale rassegna stampa: {e}")
+                    signal = "HOLD"
+                
+                # Salva risultato
+                ml_result = {
+                    "Modello": model_name,
+                    "Asset": asset_name,
+                    "Probabilità": round(prob * 100, 2),
+                    "Accuratezza": round(acc * 100, 2),
+                    "Segnale": signal,
+                    "Orizzonte": "1 settimana",
+                    "Data": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                }
+                
+                model_results.append(ml_result)
+                print(f"       ✅ {asset_name}: {signal} ({round(prob*100)}%, acc: {round(acc*100)}%)")
+                
+                # Pulizia memoria dopo ogni asset
+                del df_asset
+                gc.collect()
+                
+            except Exception as e:
+                print(f"       ❌ Errore {model_name}-{asset_name}: {e}")
+                continue
+        
+        # Aggiungi risultati di questo modello
+        all_ml_results.extend(model_results)
+        print(f"   ✅ Modello {model_name} completato: {len(model_results)} previsioni")
+        
+        # Pulizia memoria tra modelli
+        del model_results
+        gc.collect()
+        
+        # Pausa tra modelli per gestione memoria
+        if model_idx < len(models_list):
+            time.sleep(1)
     
-    return no_update
+    # Pulizia finale
+    gc.collect()
+    print(f"✅ [SEQUENTIAL-ML] Elaborazione completata: {len(all_ml_results)} previsioni totali")
+    
+    return all_ml_results
 
 def generate_unified_report(report_type="manual", now=None):
-    """Funzione unificata per generare rapporti completi sia manuali, programmati che giornalieri"""
+    """Funzione unificata per generare rapporti completi con elaborazione sequenziale ottimizzata per RAM"""
     if now is None:
         import pytz
         italy_tz = pytz.timezone('Europe/Rome')
@@ -5008,7 +4943,15 @@ def generate_unified_report(report_type="manual", now=None):
         "daily_snapshot": "GIORNALIERO"
     }.get(report_type, report_type.upper())
     
-    print(f'🚀 [{report_label}] Inizio generazione rapporto alle {now.strftime('%H:%M:%S')}')
+    print(f'🚀 [{report_label}] Inizio generazione rapporto con elaborazione sequenziale alle {now.strftime('%H:%M:%S')}')
+    
+    # === CONTROLLO MEMORIA INIZIALE ===
+    import psutil
+    try:
+        memory_usage = psutil.virtual_memory()
+        print(f"💾 [MEMORY] Memoria iniziale: {memory_usage.percent}% utilizzata ({memory_usage.used/1024/1024/1024:.1f}GB/{memory_usage.total/1024/1024/1024:.1f}GB)")
+    except:
+        print("💾 [MEMORY] Impossibile leggere info memoria")
     
     # === SALVA STATO ORIGINALE E ATTIVA TUTTI GLI INDICATORI/SEGNALI ML ===
     original_features_state = {}
@@ -6030,9 +5973,9 @@ def export_summary_csv(n_clicks, timeframe):
             print(f"🔍 [DEBUG] DataFrame vuoto, return None")
             return None
 
-        # RIMUOVERE L'INVIO AUTOMATICO DEI MESSAGGI DURANTE L'ESPORTAZIONE
-        # I messaggi vengono inviati solo tramite scheduler automatico o pulsante manuale
-        print("📊 Esportazione CSV completata (nessun messaggio Telegram inviato)")
+        # ESPORTAZIONE SOLO PER SINCRONIZZAZIONE - NESSUN MESSAGGIO TELEGRAM
+        # I CSV vengono salvati nella cartella salvataggi per sync_system.py
+        print("📊 CSV Indicatori salvato in /salvataggi per sincronizzazione")
 
         # Prepara i dati per l'esportazione
         required_columns = ['Asset', 'MAC', 'RSI', 'MACD', 'Bollinger', 'Stochastic', 'ATR']
@@ -6260,9 +6203,9 @@ def export_csv(n_clicks, selected_horizon):
         df_export = pd.DataFrame(all_results)
         telegram_invite = ""
 
-        # RIMUOVERE L'INVIO AUTOMATICO DEI MESSAGGI DURANTE L'ESPORTAZIONE ML
-        # I messaggi vengono inviati solo tramite scheduler automatico o pulsante manuale
-        print("🤖 Esportazione CSV ML completata (nessun messaggio Telegram inviato)")
+        # ESPORTAZIONE SOLO PER SINCRONIZZAZIONE - NESSUN MESSAGGIO TELEGRAM
+        # I CSV vengono salvati nella cartella salvataggi per sync_system.py
+        print("🤖 CSV Previsioni ML salvato in /salvataggi per sincronizzazione")
 
         # Prepara i dati per l'esportazione
         required_columns = ['Modello', 'Asset', 'Probabilità (%)', 'Accuratezza (%)', 'Segnale', 'Orizzonte']
@@ -6350,66 +6293,13 @@ def schedule_telegram_reports():
             except Exception as e:
                 print(f"❌ [RECUPERO] Errore controllo recupero: {e}")
             
-            # INVIO REPORT SETTIMANALE SEPARATO ogni lunedì alle 13:05
-            if now.weekday() == 0 and now.hour == 13 and now.minute == 5:  # Lunedì alle 13:05 ora italiana
-                if is_feature_enabled("backtest_reports"):
-                    try:
-                        print(f"📅 [SCHEDULER] Lunedì 13:05 - Generazione e invio report settimanale separato...")
-                        weekly_backtest = generate_weekly_backtest_summary()
-                        if weekly_backtest:
-                            # Prepara il messaggio settimanale con header specifico
-                            weekly_message = f"📊 *REPORT SETTIMANALE LUNEDÌ - {now.strftime('%d/%m/%Y %H:%M')}*\n\n{weekly_backtest}"
-                            
-                            # Gestione lunghezza messaggio settimanale
-                            if len(weekly_message) > 4000:
-                                print(f"⚠️ [SCHEDULER] Report settimanale lungo ({len(weekly_message)} caratteri), suddivisione...")
-                                
-                                # Dividi in più messaggi se necessario
-                                header = f"📊 *REPORT SETTIMANALE (parte 1) - {now.strftime('%d/%m/%Y %H:%M')}*\n\n"
-                                content_chunks = [weekly_backtest[i:i+3500] for i in range(0, len(weekly_backtest), 3500)]
-                                
-                                for i, chunk in enumerate(content_chunks):
-                                    if i == 0:
-                                        message = header + chunk
-                                    else:
-                                        message = f"📊 *REPORT SETTIMANALE (parte {i+1})*\n\n{chunk}"
-                                    
-                                    send_with_temporary_override("backtest_reports", invia_messaggio_telegram, message)
-                                    print(f"✅ [SCHEDULER] Report settimanale parte {i+1}/{len(content_chunks)} inviato ({len(message)} caratteri)")
-                                    
-                                    if i < len(content_chunks) - 1:  # Pausa tra i messaggi
-                                        time.sleep(2)
-                            else:
-                                # Messaggio settimanale singolo
-                                send_with_temporary_override("backtest_reports", invia_messaggio_telegram, weekly_message)
-                                print(f"✅ [SCHEDULER] Report settimanale inviato come messaggio separato ({len(weekly_message)} caratteri)")
-                            
-                            print(f"📊 [SCHEDULER] Report settimanale lunedì completato - NON aggiunto ad analysis_text.txt")
-                        else:
-                            print("⚠️ [SCHEDULER] Nessun dato per il report settimanale")
-                    except Exception as e:
-                        print(f"❌ [SCHEDULER] Errore invio report settimanale separato: {e}")
-                else:
-                    print(f"ℹ️ [SCHEDULER] Report settimanale saltato perché la funzione è disabilitata")
-                time.sleep(60)
-            
-            # INVIO REPORT MENSILE ogni 1° del mese alle 13:00
-            elif now.day == 1 and now.hour == 13 and now.minute == 0:  # 1° del mese alle 13:00 ora italiana
-                if is_feature_enabled("backtest_reports"):
-                    try:
-                        print(f"📅 [SCHEDULER] 1° del mese 13:00 - Generazione e invio report mensile...")
-                        # TODO: Implementare generate_monthly_report() nel futuro
-                        monthly_message = f"📊 *REPORT MENSILE - {now.strftime('%B %Y')}*\n\n🔧 Report mensile in sviluppo - Disponibile in versione futura"
-                        send_with_temporary_override("backtest_reports", invia_messaggio_telegram, monthly_message)
-                        print(f"✅ [SCHEDULER] Report mensile placeholder inviato")
-                    except Exception as e:
-                        print(f"❌ [SCHEDULER] Errore invio report mensile: {e}")
-                else:
-                    print(f"ℹ️ [SCHEDULER] Report mensile saltato perché la funzione è disabilitata")
-                time.sleep(60)
+            # NOTA: I report settimanali e mensili sono gestiti SOLO dal sistema locale
+            # Il server si occupa SOLO di:
+            # - Rassegna stampa mattutina (09:00)
+            # - Report giornaliero completo (13:00)
             
             # INVIO RASSEGNA STAMPA MATTUTINA ALLE 09:00 (ora italiana)
-            elif (now.hour == 9 and now.minute == 0):
+            if (now.hour == 9 and now.minute == 0):
                 if is_feature_enabled("scheduled_reports"):
                     try:
                         print(f"🌅 [SCHEDULER] Trigger delle 09:00 rilevato - Avvio rassegna stampa mattutina...")

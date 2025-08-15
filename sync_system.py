@@ -160,7 +160,7 @@ class SalvataggieSync:
 if __name__ == "__main__":
     # Inizializza sync system
     sync = SalvataggieSync(
-        render_url="https://five55-6pwm.onrender.com",  # URL RENDER ATTIVO AGGIORNATO
+        render_url="https://five55-mdye.onrender.com",  # URL RENDER NUOVO E FUNZIONANTE ✅
         local_path="C:\\Users\\valen\\555\\salvataggi"
     )
     

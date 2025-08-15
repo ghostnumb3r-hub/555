@@ -2,23 +2,15 @@ import dash
 from dash import dcc, html, Input, Output, State, dash_table
 import pandas as pd
 import datetime
+import pandas_datareader.data as web
 import plotly.express as px
 import plotly.graph_objects as go
 import requests
 import os
-from wallet_analyzer import WalletAnalyzer
-from recommendation_tracker import RecommendationTracker
 
 app = dash.Dash(__name__)
 server = app.server
 app.title = "💼 Wallet Dashboard"
-
-# Inizializza l'analizzatore del portafoglio e il tracker raccomandazioni
-wallet_analyzer = WalletAnalyzer()
-recommendation_tracker = RecommendationTracker()
-
-# Configurazione per dati reali
-import pandas_datareader.data as web
 
 start = datetime.datetime.today() - datetime.timedelta(days=1800)
 end = datetime.datetime.today()
@@ -33,26 +25,50 @@ def get_fred_data():
     data = {}
     for name, code in symbols.items():
         try:
+            print(f"📊 Caricando {name}...")
             df = web.DataReader(code, 'fred', start, end).dropna()
             df.columns = ['Value']
             data[name] = df
-        except:
+            print(f"✅ {name} caricato")
+        except Exception as e:
+            print(f"❌ Errore caricando {name}: {e}")
             continue
     return data
 
 def get_btc_data():
     try:
+        print("📊 Caricando Bitcoin...")
         url = "https://min-api.cryptocompare.com/data/v2/histoday?fsym=BTC&tsym=USD&limit=1800"
-        r = requests.get(url)
-        js = r.json()
-        prices = js["Data"]["Data"]
-        df = pd.DataFrame(prices)
-        df['Date'] = pd.to_datetime(df['time'], unit='s')
-        df.set_index('Date', inplace=True)
-        df = df[['close']].rename(columns={'close': 'Value'})
-        return df.dropna()
-    except:
+        r = requests.get(url, timeout=10)  # Timeout di 10 secondi
+        if r.status_code == 200:
+            js = r.json()
+            if 'Data' in js and 'Data' in js['Data']:
+                prices = js["Data"]["Data"]
+                df = pd.DataFrame(prices)
+                if not df.empty:
+                    df['Date'] = pd.to_datetime(df['time'], unit='s')
+                    df.set_index('Date', inplace=True)
+                    df = df[['close']].rename(columns={'close': 'Value'})
+                    print("✅ Bitcoin caricato")
+                    return df.dropna()
+        print("❌ Errore caricando Bitcoin: risposta non valida")
         return pd.DataFrame()
+    except requests.exceptions.Timeout:
+        print("❌ Errore caricando Bitcoin: timeout connessione")
+        return pd.DataFrame()
+    except Exception as e:
+        print(f"❌ Errore caricando Bitcoin: {e}")
+        return pd.DataFrame()
+
+data = get_fred_data()
+btc_df = get_btc_data()
+if not btc_df.empty:
+    data["Bitcoin"] = btc_df
+
+df_all = pd.concat([df["Value"] for df in data.values()], axis=1)
+df_all.columns = list(data.keys())
+df_all.dropna(inplace=True)
+df_norm = df_all / df_all.iloc[0] * 100 if not df_all.empty else pd.DataFrame()
 
 def get_performance(df, days):
     result = {}
@@ -72,250 +88,10 @@ def get_performance(df, days):
             result[col] = {"change": None, "direction": "ND"}
     return result
 
-# Carica dati reali
-print("📈 Caricamento dati di mercato...")
-data = get_fred_data()
-btc_df = get_btc_data()
-if not btc_df.empty:
-    data["Bitcoin"] = btc_df
-
-# Crea DataFrame unificato
-if data:
-    df_all = pd.concat([df["Value"] for df in data.values()], axis=1)
-    df_all.columns = list(data.keys())
-    df_all.dropna(inplace=True)
-    df_norm = df_all / df_all.iloc[0] * 100 if not df_all.empty else pd.DataFrame()
-    
-    # Calcola performance reali
-    perf_1w = get_performance(df_all, 7)
-    perf_1m = get_performance(df_all, 30)
-    perf_6m = get_performance(df_all, 180)
-    perf_1y = get_performance(df_all, 365)
-    print(f"✅ Caricati dati per {len(df_all.columns)} asset: {list(df_all.columns)}")
-else:
-    # Fallback ai dati mock in caso di problemi
-    df_norm = pd.DataFrame()
-    perf_1w = {"Bitcoin": {"change": 5.23, "direction": "📈 Su"}, "Gold ($/oz)": {"change": -1.45, "direction": "📉 Giù"}}
-    perf_1m = {"Bitcoin": {"change": 12.67, "direction": "📈 Su"}, "Gold ($/oz)": {"change": 2.34, "direction": "📈 Su"}}
-    perf_6m = {"Bitcoin": {"change": 45.12, "direction": "📈 Su"}, "Gold ($/oz)": {"change": 8.90, "direction": "📈 Su"}}
-    perf_1y = {"Bitcoin": {"change": 89.45, "direction": "📈 Su"}, "Gold ($/oz)": {"change": 15.23, "direction": "📈 Su"}}
-    df_all = pd.DataFrame({'Bitcoin': [1, 2], 'Gold ($/oz)': [1, 2]})  # Mock data per tabella
-    print("⚠️ Usando dati mock - problemi di connessione ai mercati")
-
-def get_4_assets_recommendations():
-    """Genera raccomandazioni intelligenti per i 4 asset principali basate su esposizione portafoglio REALE"""
-    assets_data = []
-    
-    # DISTRIBUZIONE REALE DEL PORTAFOGLIO (aggiornata da wallet_data.csv)
-    # Totale portafoglio: €57,893.48
-    portfolio_exposure = {
-        "Bitcoin": 88.3,         # ESTREMAMENTE sovraesposto - RISCHIO ALTISSIMO
-        "Cash/Liquidità": 8.6,   # Discreto, ma potrebbe servire di più in caso di correzioni
-        "Gold": 2.4,           # Sottopeso critico - manca diversificazione
-        "ETF S&P500": 0.7      # Sottopeso estremo - quasi assente
-    }
-    
-    # Target allocation ideali RIVISTI (strategia cash tattica)
-    main_assets = [
-        {"asset": "Bitcoin", "symbol": "🟠", "risk": "ALTISSIMO", "category": "Crypto", "target_min": 30, "target_max": 55},
-        {"asset": "Cash/Liquidità", "symbol": "💵", "risk": "BASSO", "category": "Liquidi", "target_min": 20, "target_max": 25},  # Range ideale per strategia tattica
-        {"asset": "Gold", "symbol": "🥇", "risk": "MEDIO", "category": "Safe Haven", "target_min": 8, "target_max": 20},
-        {"asset": "ETF S&P500", "symbol": "📈", "risk": "MEDIO-ALTO", "category": "Equity", "target_min": 15, "target_max": 35}
-    ]
-    
-    # Simulazione performance e ML (seed fisso per consistenza)
-    import random
-    random.seed(42)
-    
-    for asset_info in main_assets:
-        asset_name = asset_info['asset']
-        current_exposure = portfolio_exposure[asset_name]
-        target_min = asset_info['target_min']
-        target_max = asset_info['target_max']
-        
-        # Simula performance e ML
-        perf_1w = round(random.uniform(-12, 18), 2)
-        prob_ml = random.randint(35, 80)
-        
-        # LOGICA NUOVA per distribuzione reale wallet
-        
-        # Per Bitcoin (88.3% - ESTREMAMENTE sovraesposto)
-        if asset_name == "Bitcoin":
-            if current_exposure > 55:  # Estremamente sovraesposto
-                signal = "SELL"
-                action = "RIDUCI ESPOSIZIONE"
-                reason = f"Molto sovraesposto ({current_exposure}%) - Rischio elevato di concentrazione"
-            elif current_exposure > target_max:
-                signal = "SELL"
-                action = "VENDI GRADUALMENTE"
-                reason = f"Sovraesposto ({current_exposure}%) - Suggerito ribilanciamento"
-            else:
-                signal = "HOLD"
-                action = "MANTIENI"
-                reason = f"Esposizione accettabile ({current_exposure}%)"
-        
-        # Per Gold (2.4% - Sottopeso)
-        elif asset_name == "Gold":
-            if current_exposure < target_min:
-                signal = "BUY"
-                action = "AUMENTA POSIZIONE"
-                if current_exposure < 5:
-                    reason = f"Sottopeso ({current_exposure}%) - Utile diversificazione in incertezza"
-                else:
-                    reason = f"Sottopeso ({current_exposure}%) - Considera aumentare per safe haven"
-            else:
-                signal = "HOLD"
-                action = "MANTIENI"
-                reason = f"Esposizione adeguata ({current_exposure}%)"
-        
-        # Per ETF S&P500 (0.7% - Quasi assente)
-        elif asset_name == "ETF S&P500":
-            if current_exposure < target_min:
-                signal = "BUY"
-                action = "AUMENTA POSIZIONE"
-                if current_exposure < 5:
-                    reason = f"Molto sottopeso ({current_exposure}%) - Ribilanciamento consigliato"
-                else:
-                    reason = f"Sottopeso ({current_exposure}%) - Utile diversificazione azionaria"
-            else:
-                signal = "HOLD"
-                action = "MANTIENI"
-                reason = f"Esposizione adeguata ({current_exposure}%)"
-        
-        # Per Cash/Liquidità (8.6% - Strategia tattica avanzata)
-        elif asset_name == "Cash/Liquidità":
-            # STRATEGIA CASH AVANZATA: 20-25% ideale, crash/opportunità logic
-            
-            # Simula contesto di mercato (basato su ML probability come proxy sentiment)
-            market_context = "NEUTRO"
-            if prob_ml > 70:
-                market_context = "BULL_MARKET"  # Mercato forte - meno cash
-            elif prob_ml < 35:
-                market_context = "CRASH_OPPORTUNITY"  # Crash/correzione - usa cash per comprare
-            elif prob_ml < 45:
-                market_context = "INCERTEZZA"  # Mercati incerti - aumenta cash
-                
-            # Determina target cash dinamico in base al contesto
-            if market_context == "INCERTEZZA":
-                target_cash_min, target_cash_max = 25, 30  # Più cash in incertezza
-            elif market_context == "CRASH_OPPORTUNITY":
-                target_cash_min, target_cash_max = 10, 15  # Meno cash, si investe
-            elif market_context == "BULL_MARKET":
-                target_cash_min, target_cash_max = 15, 22  # Cash moderato
-            else:  # NEUTRO
-                target_cash_min, target_cash_max = 20, 25  # Range ideale standard
-            
-            # Logica decisionale cash
-            if current_exposure < 10:  # Cash molto basso - critico
-                signal = "BUY"
-                action = "INCREMENTA LIQUIDITÀ"
-                reason = f"Liquidità critica ({current_exposure}%) - Rischio di vendita forzata in perdita"
-                
-            elif current_exposure > 30:  # Cash molto alto
-                signal = "SELL"
-                action = "INVESTI ECCESSO CASH"
-                reason = f"Cash eccessivo ({current_exposure}%) - Perdita opportunità, drag sulla performance"
-                
-            elif current_exposure < target_cash_min:  # Sotto target dinamico
-                if market_context == "INCERTEZZA":
-                    signal = "BUY"
-                    action = "AUMENTA CASH - DIFESA"
-                    reason = f"Cash sotto target ({current_exposure}% vs {target_cash_min}%) - Preparazione per incertezza/crash"
-                elif market_context == "BULL_MARKET":
-                    signal = "BUY"
-                    action = "RIEQUILIBRA CASH"
-                    reason = f"Cash sotto target ({current_exposure}% vs {target_cash_min}%) - Mantieni liquidità minima"
-                else:
-                    signal = "BUY"
-                    action = "INCREMENTA GRADUALMENTE"
-                    reason = f"Cash sotto target ({current_exposure}% vs {target_cash_min}%) - Riequilibrio prudente"
-                    
-            elif current_exposure > target_cash_max:  # Sopra target dinamico
-                if market_context == "CRASH_OPPORTUNITY":
-                    signal = "SELL"
-                    action = "INVESTI IN CRASH"
-                    reason = f"Cash sopra target ({current_exposure}% vs {target_cash_max}%) - Opportunità di acquisto a sconto"
-                elif market_context == "BULL_MARKET":
-                    signal = "SELL"
-                    action = "RIDUCI CASH - INVESTI"
-                    reason = f"Cash sopra target ({current_exposure}% vs {target_cash_max}%) - Mercato forte, partecipa alla crescita"
-                else:
-                    signal = "HOLD"
-                    action = "MANTIENI - MONITORA"
-                    reason = f"Cash sopra target ({current_exposure}% vs {target_cash_max}%) - Attendi chiarezza di mercato"
-                    
-            else:  # Nel target dinamico ideale
-                if market_context == "CRASH_OPPORTUNITY" and current_exposure > 20:
-                    signal = "SELL"
-                    action = "USA CASH PER CRASH"
-                    reason = f"Cash nel target ({current_exposure}%) - Usa parte per acquisti in correzione (cash to work)"
-                else:
-                    signal = "HOLD"
-                    action = "MANTIENI - OTTIMALE"
-                    reason = f"Cash ottimale ({current_exposure}%) - Strategia tattica ben posizionata per contesto {market_context.lower()}"
-        
-        # Fallback per altri asset
-        else:
-            if current_exposure > target_max:
-                signal = "SELL"
-                action = "RIDUCI ESPOSIZIONE"
-                reason = f"Sovraesposto ({current_exposure}%) - Ribilanciamento necessario"
-            elif current_exposure < target_min:
-                signal = "BUY"
-                action = "AUMENTA POSIZIONE"
-                reason = f"Sottopeso ({current_exposure}%) - Opportunità diversificazione"
-            else:
-                signal = "HOLD"
-                action = "MANTIENI"
-                reason = f"Esposizione bilanciata ({current_exposure}%)"
-        
-        # Override basato su segnali ML se molto forti
-        if prob_ml >= 75 and signal == "SELL" and asset_info['risk'] != 'ALTISSIMO':
-            signal = "HOLD"
-            action = "MANTIENI - ML POSITIVO"
-            reason += f" [ML molto positivo: {prob_ml}%]"
-        elif prob_ml <= 25 and signal == "BUY":
-            signal = "HOLD"
-            action = "MANTIENI - ML NEGATIVO"
-            reason += f" [ML molto negativo: {prob_ml}%]"
-        # Calcola target ideale dinamico (per cash usa il target dinamico)
-        if asset_name == "Cash/Liquidità":
-            # Usa i target dinamici calcolati sopra
-            market_context = "NEUTRO"
-            if prob_ml > 70:
-                market_context = "BULL_MARKET"
-            elif prob_ml < 35:
-                market_context = "CRASH_OPPORTUNITY"
-            elif prob_ml < 45:
-                market_context = "INCERTEZZA"
-                
-            if market_context == "INCERTEZZA":
-                target_ideal = "25-30%"  # Più cash in incertezza
-            elif market_context == "CRASH_OPPORTUNITY":
-                target_ideal = "10-15%"  # Meno cash, si investe
-            elif market_context == "BULL_MARKET":
-                target_ideal = "15-22%"  # Cash moderato
-            else:  # NEUTRO
-                target_ideal = "20-25%"  # Range ideale standard
-        else:
-            # Per altri asset usa il target fisso
-            target_ideal = f"{target_min}-{target_max}%"
-            
-        assets_data.append({
-            "Asset": f"{asset_info['symbol']} {asset_info['asset']}",
-            "Categoria": asset_info['category'],
-            "Rischio": asset_info['risk'],
-            "Esposizione Attuale": f"{current_exposure}%",
-            "Ribilanciamento Ideale": target_ideal,
-            "Performance 1W": f"{perf_1w:+.2f}%",
-            "ML Probability": f"{prob_ml}%",
-            "Segnale": signal,
-            "Azione": action,
-            "Motivazione": reason
-        })
-    
-    return assets_data
-
+perf_1w = get_performance(df_all, 7)
+perf_1m = get_performance(df_all, 30)
+perf_6m = get_performance(df_all, 180)
+perf_1y = get_performance(df_all, 365)
 
 # === Wallet ===
 def load_and_save_wallet_data():
@@ -844,123 +620,7 @@ app.layout = html.Div([
         ]),
         
         html.Div(id="555bt-analysis-section", style={"display": "block"})
-    ], style={"padding": "20px", "backgroundColor": "#f4f1f8", "borderRadius": "10px"}),
-    
-    # === SEZIONE ACCURACY TRACKING ===
-    html.Hr(style={"margin": "40px 0", "border": "2px solid #16a085"}),
-    
-    html.Div([
-        html.Div([
-            html.H2("🎯 Accuracy Tracking Raccomandazioni", style={"color": "#2c3e50", "marginBottom": "20px", "display": "inline-block"}),
-            html.Button("📊 Genera Report Weekly", id="generate-accuracy-button", n_clicks=0,
-                       style={"padding": "8px 15px", "backgroundColor": "#16a085", "color": "white", 
-                             "border": "none", "borderRadius": "5px", "cursor": "pointer", "marginLeft": "20px",
-                             "fontSize": "14px", "fontWeight": "bold"}),
-        ], style={"display": "flex", "alignItems": "center", "justifyContent": "space-between"}),
-        
-        html.Div(id="accuracy-status", style={"marginBottom": "10px"}),
-        
-        html.Button("👁️ Mostra/Nascondi Tracking", id="toggle-accuracy", n_clicks=0,
-                   style={"padding": "10px 20px", "backgroundColor": "#16a085", "color": "white", 
-                         "border": "none", "borderRadius": "5px", "cursor": "pointer", "marginBottom": "20px"}),
-        
-        html.Div([
-            html.P("🎯 Questa sezione mostra l'accuratezza delle raccomandazioni nel tempo. I report vengono generati automaticamente dopo aver accumulato almeno 7 giorni di dati.",
-                   style={"fontSize": "12px", "color": "#7f8c8d", "fontStyle": "italic", "marginBottom": "15px"})
-        ]),
-        
-        html.Div(id="accuracy-section", style={"display": "block"})
-    ], style={"padding": "20px", "backgroundColor": "#e8f8f5", "borderRadius": "10px", "marginBottom": "30px"}),
-    
-    # === SEZIONE 4 ASSET PRINCIPALI ===
-    html.Hr(style={"margin": "40px 0", "border": "2px solid #e67e22"}),
-    
-    html.Div([
-        html.H2("🎯 Raccomandazioni 4 Asset Principali", style={"color": "#2c3e50", "marginBottom": "20px", "textAlign": "center"}),
-        
-        html.P("Riepilogo semplificato delle raccomandazioni per i 4 asset core del portafoglio",
-               style={"textAlign": "center", "color": "#7f8c8d", "fontSize": "14px", "marginBottom": "30px"}),
-        
-        # Tabella 4 asset
-        dash_table.DataTable(
-            data=get_4_assets_recommendations(),
-            columns=[
-                {"name": "Asset", "id": "Asset"},
-                {"name": "Categoria", "id": "Categoria"},
-                {"name": "Rischio", "id": "Rischio"},
-                {"name": "Attuale", "id": "Esposizione Attuale"},
-                {"name": "Target", "id": "Ribilanciamento Ideale"},
-                {"name": "Perf 1W", "id": "Performance 1W"},
-                {"name": "Segnale", "id": "Segnale"},
-                {"name": "Azione", "id": "Azione"},
-                {"name": "Motivazione", "id": "Motivazione"}
-            ],
-            style_cell={
-                'textAlign': 'left',
-                'padding': '15px',
-                'fontFamily': 'Arial',
-                'fontSize': '13px',
-                'whiteSpace': 'normal',
-                'height': 'auto'
-            },
-            style_header={
-                'backgroundColor': '#e67e22',
-                'color': 'white',
-                'fontWeight': 'bold',
-                'textAlign': 'center'
-            },
-            style_data_conditional=[
-                {
-                    'if': {'filter_query': '{Segnale} = BUY'},
-                    'backgroundColor': '#d5f4e6',
-                    'color': '#27ae60',
-                    'fontWeight': 'bold'
-                },
-                {
-                    'if': {'filter_query': '{Segnale} = SELL'},
-                    'backgroundColor': '#fadbd8',
-                    'color': '#e74c3c',
-                    'fontWeight': 'bold'
-                },
-                {
-                    'if': {'filter_query': '{Segnale} = HOLD'},
-                    'backgroundColor': '#fdeaa7',
-                    'color': '#f39c12',
-                    'fontWeight': 'bold'
-                },
-                {
-                    'if': {'filter_query': '{Rischio} = ALTO'},
-                    'backgroundColor': '#ffebee'
-                },
-                {
-                    'if': {'filter_query': '{Rischio} = MEDIO'},
-                    'backgroundColor': '#fff3e0'
-                },
-                {
-                    'if': {'filter_query': '{Rischio} = BASSO'},
-                    'backgroundColor': '#e8f5e8'
-                }
-            ],
-            sort_action="native",
-            page_size=4,
-            style_table={'margin': '0 auto', 'width': '95%'}
-        ),
-        
-        # Info addizionale
-        html.Div([
-            html.H4("📊 Info Raccomandazioni", style={"color": "#2c3e50", "marginTop": "30px", "marginBottom": "15px"}),
-            html.Ul([
-                html.Li("🔴 SELL: Segnali negativi prevalenti - considera vendita"),
-                html.Li("🟡 HOLD: Segnali misti o neutrali - mantieni posizione"), 
-                html.Li("🟢 BUY: Segnali positivi prevalenti - considera acquisto"),
-            ], style={"fontSize": "14px", "color": "#34495e"}),
-            
-            html.P([
-                html.Strong("Nota: "),
-                "Queste sono raccomandazioni simulate. Per analisi reali esegui 555bt.py per ottenere segnali ML aggiornati."
-            ], style={"fontSize": "12px", "color": "#7f8c8d", "fontStyle": "italic", "marginTop": "20px", "textAlign": "center"})
-        ])
-    ], style={"padding": "20px", "backgroundColor": "#fdf6e3", "borderRadius": "10px", "marginBottom": "30px"})
+    ], style={"padding": "20px", "backgroundColor": "#f4f1f8", "borderRadius": "10px"})
 ])
 
 # === CALLBACK TOGGLE WALLET ===
@@ -981,41 +641,14 @@ def toggle_wallet(n, current_style):
     prevent_initial_call=True
 )
 def refresh_wallet_data(n_clicks):
-    """Aggiorna i dati del portafoglio e li salva per 555bt + tracking raccomandazioni"""
+    """Aggiorna i dati del portafoglio e li salva per 555bt"""
     if n_clicks:
         global wallet_df
         wallet_df = load_and_save_wallet_data()
-        
-        # === SALVATAGGIO AUTOMATICO TRACKING RACCOMANDAZIONI ===
-        try:
-            # Ottieni raccomandazioni attuali
-            current_recommendations = get_4_assets_recommendations()
-            
-            # Salva raccomandazioni storiche
-            rec_count = recommendation_tracker.save_current_recommendations(
-                current_recommendations, 
-                wallet_df.to_dict('records') if not wallet_df.empty else [],
-                {'perf_1w': perf_1w, 'perf_1m': perf_1m, 'perf_6m': perf_6m, 'perf_1y': perf_1y}
-            )
-            
-            # Salva performance di mercato storiche
-            perf_count = recommendation_tracker.save_market_performance(perf_1w)
-            
-            return html.Div([
-                html.Span("✅ Dati aggiornati!", style={'color': '#27ae60', 'fontWeight': 'bold'}),
-                html.Br(),
-                html.Span(f"📊 Salvate {rec_count} raccomandazioni + {perf_count} performance per tracking", 
-                         style={'fontSize': '11px', 'color': '#7f8c8d'}),
-                html.Span(f" - {datetime.datetime.now().strftime('%H:%M:%S')}", style={'fontSize': '12px', 'color': '#7f8c8d'})
-            ])
-        except Exception as e:
-            print(f"⚠️ Errore tracking: {e}")
-            return html.Div([
-                html.Span("✅ Dati aggiornati!", style={'color': '#27ae60', 'fontWeight': 'bold'}),
-                html.Br(),
-                html.Span(f"⚠️ Tracking parziale - {str(e)[:50]}", style={'fontSize': '11px', 'color': '#e67e22'}),
-                html.Span(f" - {datetime.datetime.now().strftime('%H:%M:%S')}", style={'fontSize': '12px', 'color': '#7f8c8d'})
-            ])
+        return html.Div([
+            html.Span("✅ Dati aggiornati!", style={'color': '#27ae60', 'fontWeight': 'bold'}),
+            html.Span(f" - {datetime.datetime.now().strftime('%H:%M:%S')}", style={'fontSize': '12px', 'color': '#7f8c8d'})
+        ])
     return html.Div()
 
 # === CALLBACK WALLET CONTENT ===
@@ -1441,249 +1074,7 @@ def update_555bt_content(load_clicks, toggle_clicks):
     
     return html.Div(content_sections)
 
-# === CALLBACK TOGGLE ACCURACY SECTION ===
-@app.callback(
-    Output("accuracy-section", "style"),
-    Input("toggle-accuracy", "n_clicks"),
-    State("accuracy-section", "style")
-)
-def toggle_accuracy_section(n, current_style):
-    if not current_style: 
-        current_style = {"display": "block"}
-    return {"display": "none"} if current_style["display"] == "block" else {"display": "block"}
-
-# === CALLBACK GENERA ACCURACY REPORT ===
-@app.callback(
-    Output('accuracy-status', 'children'),
-    Input('generate-accuracy-button', 'n_clicks'),
-    prevent_initial_call=True
-)
-def generate_accuracy_report(n_clicks):
-    """Genera un report di accuracy settimanale"""
-    if n_clicks:
-        try:
-            # Genera report settimanale
-            report = recommendation_tracker.calculate_accuracy_report(7)
-            
-            if report is None:
-                return html.Div([
-                    html.Span("⚠️ Nessun dato sufficiente", style={'color': '#e67e22', 'fontWeight': 'bold'}),
-                    html.Br(),
-                    html.Span("Serve almeno 1 settimana di dati storici per generare il report", style={'fontSize': '12px', 'color': '#7f8c8d'})
-                ])
-            
-            # Calcola rating
-            accuracy_pct = report['accuracy_percentuale']
-            if accuracy_pct >= 70:
-                rating_icon = "🎆"
-                rating_color = "#27ae60"
-                rating_text = "ECCELLENTE"
-            elif accuracy_pct >= 60:
-                rating_icon = "🚀"
-                rating_color = "#f39c12"
-                rating_text = "BUONA"
-            elif accuracy_pct >= 50:
-                rating_icon = "🔥"
-                rating_color = "#e67e22"
-                rating_text = "MEDIA"
-            else:
-                rating_icon = "⚡"
-                rating_color = "#e74c3c"
-                rating_text = "DA MIGLIORARE"
-            
-            return html.Div([
-                html.Span("✅ Report accuracy generato!", style={'color': '#27ae60', 'fontWeight': 'bold'}),
-                html.Br(),
-                html.Span(f"{rating_icon} {rating_text}: {accuracy_pct:.1f}% ({report['raccomandazioni_corrette']}/{report['totale_raccomandazioni']})", 
-                         style={'fontSize': '12px', 'color': rating_color, 'fontWeight': 'bold'}),
-                html.Span(f" - {datetime.datetime.now().strftime('%H:%M:%S')}", style={'fontSize': '12px', 'color': '#7f8c8d'})
-            ])
-        except Exception as e:
-            return html.Div([
-                html.Span("❌ Errore generazione report", style={'color': '#e74c3c', 'fontWeight': 'bold'}),
-                html.Br(),
-                html.Span(f"Dettagli: {str(e)[:60]}", style={'fontSize': '11px', 'color': '#7f8c8d'})
-            ])
-    return html.Div()
-
-# === CALLBACK CONTENUTO ACCURACY ===
-@app.callback(
-    Output('accuracy-section', 'children'),
-    Input('generate-accuracy-button', 'n_clicks'),
-    Input('toggle-accuracy', 'n_clicks')
-)
-def update_accuracy_content(generate_clicks, toggle_clicks):
-    """Aggiorna il contenuto della sezione accuracy tracking"""
-    
-    # Ottieni summary più recente
-    summary = recommendation_tracker.get_latest_accuracy_summary()
-    
-    if summary is None:
-        return html.Div([
-            html.Div([
-                html.H4("🚀 Inizia il Tracking!", style={"color": "#2c3e50", "textAlign": "center"}),
-                html.P("Il sistema di accuracy tracking ti permette di misurare l'efficacia delle raccomandazioni nel tempo.", 
-                       style={"textAlign": "center", "margin": "20px 0"}),
-                html.P("📋 Come funziona:", style={"fontWeight": "bold", "marginTop": "30px"}),
-                html.Ol([
-                    html.Li("Ogni volta che aggiorni i dati, vengono salvate le raccomandazioni attuali"),
-                    html.Li("Dopo 7 giorni, il sistema confronta le previsioni con le performance reali"),
-                    html.Li("Viene calcolata l'accuratezza: BUY corretti se asset sale, SELL corretti se scende, ecc."),
-                    html.Li("I report mostrano la percentuale di successo delle raccomandazioni")
-                ], style={"textAlign": "left", "margin": "10px 0", "lineHeight": "1.6"}),
-                
-                html.Div([
-                    html.P("📊 Per iniziare:", style={"fontWeight": "bold", "marginTop": "30px", "marginBottom": "10px"}),
-                    html.P("1. Clicca 'Aggiorna Dati' nella sezione Wallet per salvare le raccomandazioni attuali", 
-                           style={"fontSize": "14px", "margin": "5px 0"}),
-                    html.P("2. Ripeti l'operazione regolarmente per accumulare dati storici", 
-                           style={"fontSize": "14px", "margin": "5px 0"}),
-                    html.P("3. Dopo 7+ giorni, clicca 'Genera Report Weekly' per vedere l'accuracy", 
-                           style={"fontSize": "14px", "margin": "5px 0"})
-                ], style={"backgroundColor": "#f0f8ff", "padding": "15px", "borderRadius": "8px", "border": "1px solid #16a085"})
-            ], style={"padding": "30px", "backgroundColor": "#fafafa", "borderRadius": "10px", "margin": "20px"})
-        ])
-    
-    # Mostra l'ultimo report disponibile
-    accuracy_pct = summary['accuracy_pct']
-    
-    # Determina rating e colore
-    if accuracy_pct >= 70:
-        rating_icon = "🎆"
-        rating_color = "#27ae60"
-        rating_text = "ECCELLENTE"
-        rating_bg = "#eafaf1"
-        performance_comment = "Le raccomandazioni sono molto affidabili! 🚀"
-    elif accuracy_pct >= 60:
-        rating_icon = "🚀"
-        rating_color = "#f39c12"
-        rating_text = "BUONA"
-        rating_bg = "#fef9e7"
-        performance_comment = "Buone performance, con margine di miglioramento. 💪"
-    elif accuracy_pct >= 50:
-        rating_icon = "🔥"
-        rating_color = "#e67e22"
-        rating_text = "MEDIA"
-        rating_bg = "#fdf2e9"
-        performance_comment = "Performance nella media, consider aggiustamenti. 🎯"
-    else:
-        rating_icon = "⚡"
-        rating_color = "#e74c3c"
-        rating_text = "DA MIGLIORARE"
-        rating_bg = "#fdf2f2"
-        performance_comment = "Il sistema ha bisogno di calibrazione. 🔧"
-    
-    return html.Div([
-        # Card accuracy principale
-        html.Div([
-            html.H4(f"{rating_icon} Accuracy Report - {rating_text}", 
-                   style={"color": rating_color, "textAlign": "center", "marginBottom": "20px"}),
-            
-            # Statistiche principali
-            html.Div([
-                html.Div([
-                    html.H2(f"{accuracy_pct:.1f}%", style={"color": rating_color, "margin": "0", "fontSize": "48px", "fontWeight": "bold"}),
-                    html.P("Accuracy", style={"color": "#7f8c8d", "margin": "0", "fontSize": "14px"})
-                ], style={"textAlign": "center", "width": "30%", "display": "inline-block", "verticalAlign": "top"}),
-                
-                html.Div([
-                    html.H3(f"{summary['corrette']}", style={"color": "#27ae60", "margin": "0", "fontSize": "36px"}),
-                    html.P("Corrette", style={"color": "#7f8c8d", "margin": "0", "fontSize": "14px"})
-                ], style={"textAlign": "center", "width": "30%", "display": "inline-block", "verticalAlign": "top", "marginLeft": "5%"}),
-                
-                html.Div([
-                    html.H3(f"{summary['totale_raccomandazioni']}", style={"color": "#3498db", "margin": "0", "fontSize": "36px"}),
-                    html.P("Totale", style={"color": "#7f8c8d", "margin": "0", "fontSize": "14px"})
-                ], style={"textAlign": "center", "width": "30%", "display": "inline-block", "verticalAlign": "top", "marginLeft": "5%"})
-            ], style={"marginBottom": "25px"}),
-            
-            # Commento performance
-            html.P(performance_comment, 
-                   style={"textAlign": "center", "fontSize": "16px", "color": "#2c3e50", "marginBottom": "20px"}),
-            
-            # Dettagli tecnici
-            html.Div([
-                html.P(f"📅 Periodo analizzato: {summary['giorni_analizzati']} giorni (dal {summary['date']})", 
-                       style={"fontSize": "12px", "color": "#7f8c8d", "margin": "5px 0"}),
-                html.P(f"📊 Reports generati: {summary['total_reports']}", 
-                       style={"fontSize": "12px", "color": "#7f8c8d", "margin": "5px 0"})
-            ], style={"textAlign": "center"})
-            
-        ], style={
-            "backgroundColor": rating_bg,
-            "padding": "30px",
-            "borderRadius": "15px",
-            "border": f"2px solid {rating_color}",
-            "margin": "20px 0",
-            "boxShadow": "0 4px 8px rgba(0,0,0,0.1)"
-        }),
-        
-        # Info metodologia
-        html.Div([
-            html.H5("🎯 Metodologia di Valutazione", style={"color": "#2c3e50", "marginBottom": "15px"}),
-            html.Ul([
-                html.Li("🟢 BUY corretto: Asset ha performance positiva dopo 1 settimana"),
-                html.Li("🔴 SELL corretto: Asset ha performance negativa dopo 1 settimana"),
-                html.Li("🟡 HOLD corretto: Asset ha performance stabile (±2%) dopo 1 settimana")
-            ], style={"fontSize": "13px", "lineHeight": "1.6"}),
-            
-            html.P([
-                html.Strong("Nota: "),
-                "Il sistema migliora con più dati. Raccomandazioni più frequenti = accuracy più affidabile."
-            ], style={"fontSize": "12px", "color": "#7f8c8d", "fontStyle": "italic", "marginTop": "15px"})
-        ], style={
-            "backgroundColor": "#f8f9fa",
-            "padding": "20px",
-            "borderRadius": "10px",
-            "border": "1px solid #dee2e6",
-            "marginTop": "20px"
-        })
-    ])
-
-def auto_startup_refresh():
-    """Auto-refresh dati e analisi all'avvio del wallet"""
-    print("🔄 AUTO-REFRESH: Aggiornamento dati all'avvio...")
-    
-    try:
-        # === AUTO-REFRESH DATI WALLET ===
-        global wallet_df
-        wallet_df = load_and_save_wallet_data()
-        print("✅ AUTO-REFRESH: Dati wallet aggiornati")
-        
-        # === AUTO-SAVE RACCOMANDAZIONI ===
-        try:
-            current_recommendations = get_4_assets_recommendations()
-            rec_count = recommendation_tracker.save_current_recommendations(
-                current_recommendations, 
-                wallet_df.to_dict('records') if not wallet_df.empty else [],
-                {'perf_1w': perf_1w, 'perf_1m': perf_1m, 'perf_6m': perf_6m, 'perf_1y': perf_1y}
-            )
-            perf_count = recommendation_tracker.save_market_performance(perf_1w)
-            print(f"✅ AUTO-REFRESH: {rec_count} raccomandazioni + {perf_count} performance salvate")
-        except Exception as e:
-            print(f"⚠️ AUTO-REFRESH: Tracking parziale - {e}")
-        
-        # === AUTO-CARICAMENTO 555BT ===
-        analysis = load_555bt_analysis()
-        if analysis['available']:
-            ml_count = len(analysis['ml_predictions'])
-            tech_count = len(analysis['technical_signals'])
-            rec_count = len(analysis['portfolio_recommendations'])
-            print(f"✅ AUTO-REFRESH: 555BT caricato - ML:{ml_count} Tecnici:{tech_count} Raccomandazioni:{rec_count}")
-        else:
-            print("⚠️ AUTO-REFRESH: Nessun dato 555BT trovato (esegui 555bt.py per generare analisi)")
-        
-        print("🎉 AUTO-REFRESH: Wallet completamente aggiornato all'avvio!")
-        
-    except Exception as e:
-        print(f"❌ AUTO-REFRESH: Errore durante l'aggiornamento - {e}")
-        print("⚠️ AUTO-REFRESH: Il wallet partirà comunque, ma i dati potrebbero non essere aggiornati")
-
 if __name__ == "__main__":
     print("💼 Avvio Wallet Dashboard...")
-    
-    # === AUTO-REFRESH ALL'AVVIO ===
-    auto_startup_refresh()
-    
     print("🌍 Accesso: http://localhost:8051")
     app.run(debug=True, port=8051)

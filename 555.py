@@ -15,6 +15,15 @@ import pytz
 from urllib.request import urlopen
 from urllib.error import URLError
 
+# === SYNC SYSTEM INTEGRATION ===
+try:
+    from sync_system import SalvataggieSync
+    SYNC_ENABLED = True
+    print("🔄 [SYNC] Sistema di sincronizzazione caricato")
+except ImportError:
+    SYNC_ENABLED = False
+    print("⚠️ [SYNC] sync_system.py non trovato - sync disabilitato")
+
 # === OTTIMIZZAZIONI PERFORMANCE 555-TURBO ===
 try:
     from performance_config import (
@@ -74,10 +83,10 @@ TELEGRAM_CHAT_ID = "@abkllr"
 
 # === CONTROLLO FUNZIONI CON OVERRIDE TEMPORANEO ===
 FEATURES_ENABLED = {
-    "scheduled_reports": True,      # Rapporti programmati (8:00, 18:00)
-    "manual_reports": True,         # Invii manuali da pulsanti
-    "backtest_reports": True,       # Backtest settimanali
-    "analysis_reports": True        # Analysis text (8:10)
+    "scheduled_reports": False,     # Rapporti programmati DISABILITATI (era True)
+    "manual_reports": False,        # Invii manuali DISABILITATI (era True) 
+    "backtest_reports": True,       # Backtest settimanali ATTIVI
+    "analysis_reports": False       # Analysis text DISABILITATO (era True)
 }
 
 def is_feature_enabled(feature_name):
@@ -2069,12 +2078,16 @@ def download_eventi():
     # === Invia il messaggio completo degli eventi (stesso della funzione genera_messaggio_eventi) ===
     text_msg = genera_messaggio_eventi()
 
-    # === Invia messaggio Telegram con il contenuto completo ===
+    # === SALVATAGGIO SOLO PER SINCRONIZZAZIONE - NESSUN TELEGRAM ===
+    # Salva nella cartella salvataggi per sync_system.py
     try:
-        invia_messaggio_telegram(text_msg)
-        print("✅ Messaggio Telegram calendario inviato con successo!")
+        import datetime
+        calendario_path = os.path.join('salvataggi', 'calendario_eventi.csv')
+        df['Data_Export'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        df.to_csv(calendario_path, index=False, encoding="utf-8-sig")
+        print("📅 CSV Calendario salvato in /salvataggi per sincronizzazione")
     except Exception as e:
-        print(f"❌ Errore invio messaggio Telegram calendario: {e}")
+        print(f"❌ Errore salvataggio calendario: {e}")
 
     # === Risposta HTTP: download CSV per browser ===
     buffer_csv = io.StringIO()
@@ -4599,14 +4612,89 @@ def send_backtest_manual(n_clicks):
     prevent_initial_call=True
 )
 def send_unified_report_manual(n_clicks):
-    """Callback per inviare il rapporto unificato manualmente."""
+    """Callback per generare il rapporto unificato e salvarlo (NESSUN invio Telegram)."""
     if n_clicks:
         try:
-            print("🚀 [MANUAL] Richiesta di invio manuale ricevuta. Chiamo la funzione unificata...")
-            # Chiama la funzione unificata per generare e inviare il rapporto manuale
-            generate_unified_report(report_type="manual")
+            import pytz
+            italy_tz = pytz.timezone('Europe/Rome')
+            now = datetime.datetime.now(italy_tz)
+            
+            print(f"📊 [MANUAL-SAVE] Generazione rapporto unificato per salvataggio - {now.strftime('%H:%M:%S')}")
+            
+            # === GENERA TUTTI I FILE CSV PER SALVATAGGIO ===
+            try:
+                print("📊 [MANUAL-SAVE] Generazione file CSV completi...")
+                
+                # 1. Genera segnali tecnici completi
+                df_all_indicators = get_all_signals_summary('1d')
+                if not df_all_indicators.empty:
+                    indicators_path = os.path.join('salvataggi', 'segnali_tecnici_manuale.csv')
+                    df_all_indicators['Data'] = now.strftime('%Y-%m-%d %H:%M:%S')
+                    df_all_indicators['Timeframe'] = '1d'
+                    df_all_indicators['Tipo'] = 'Manuale'
+                    df_all_indicators.to_csv(indicators_path, index=False)
+                    print(f"   📈 Salvato: {indicators_path} ({len(df_all_indicators)} asset)")
+                
+                # 2. Genera previsioni ML complete
+                all_assets = {**symbols, "Bitcoin": "BTC"}
+                ml_results = []
+                
+                for model_name in ["Random Forest", "Gradient Boosting", "XGBoost"]:
+                    if model_name in models:
+                        model_inst = models[model_name][0]
+                        for asset_name, code in all_assets.items():
+                            try:
+                                df_i = load_crypto_data(code) if asset_name == "Bitcoin" else load_data_fred(code, start, end)
+                                if df_i.empty:
+                                    continue
+                                df_i = add_features(df_i, 5)
+                                prob, acc = train_model(model_inst, df_i)
+                                
+                                ml_results.append({
+                                    "Modello": model_name,
+                                    "Asset": asset_name,
+                                    "Probabilità": round(prob * 100, 2),
+                                    "Accuratezza": round(acc * 100, 2),
+                                    "Orizzonte": "1 settimana",
+                                    "Data": now.strftime('%Y-%m-%d %H:%M:%S'),
+                                    "Tipo": "Manuale"
+                                })
+                            except Exception as e:
+                                print(f"     ⚠️ Errore {model_name}-{asset_name}: {e}")
+                                continue
+                
+                if ml_results:
+                    ml_df = pd.DataFrame(ml_results)
+                    ml_path = os.path.join('salvataggi', 'previsioni_ml_manuale.csv')
+                    ml_df.to_csv(ml_path, index=False)
+                    print(f"   🤖 Salvato: {ml_path} ({len(ml_results)} previsioni)")
+                
+                # 3. Salva rapporto calendario
+                calendario_content = genera_messaggio_eventi_legacy()
+                calendario_path = os.path.join('salvataggi', 'calendario_manuale.txt')
+                with open(calendario_path, 'w', encoding='utf-8') as f:
+                    f.write(f"CALENDARIO MANUALE - {now.strftime('%d/%m/%Y %H:%M')}\n\n{calendario_content}")
+                print(f"   📅 Salvato: {calendario_path}")
+                
+                # 4. Salva analisi notizie
+                try:
+                    news_analysis = analyze_news_sentiment_and_impact()
+                    if news_analysis and news_analysis.get('summary'):
+                        news_path = os.path.join('salvataggi', 'analisi_notizie_manuale.txt')
+                        with open(news_path, 'w', encoding='utf-8') as f:
+                            f.write(f"ANALISI NOTIZIE MANUALE - {now.strftime('%d/%m/%Y %H:%M')}\n\n{news_analysis['summary']}")
+                        print(f"   📰 Salvato: {news_path}")
+                except Exception as e:
+                    print(f"   ⚠️ Errore salvataggio analisi notizie: {e}")
+                
+                print("✅ [MANUAL-SAVE] Tutti i file CSV e report salvati in /salvataggi")
+                print("📁 [MANUAL-SAVE] NESSUN messaggio Telegram inviato - solo salvataggio locale")
+                
+            except Exception as e:
+                print(f"❌ [MANUAL-SAVE] Errore nella generazione file: {e}")
+                
         except Exception as e:
-            print(f"❌ [MANUAL] Errore critico durante l'avvio del report manuale: {e}")
+            print(f"❌ [MANUAL-SAVE] Errore critico durante salvataggio rapporto manuale: {e}")
     
     return no_update
 
@@ -4616,24 +4704,84 @@ def send_unified_report_manual(n_clicks):
     prevent_initial_call=True
 )
 def send_morning_briefing_manual(n_clicks):
-    """Callback per inviare la rassegna stampa mattutina manualmente."""
+    """Callback per generare la rassegna stampa e salvarla (NESSUN invio Telegram)."""
     if n_clicks:
         try:
-            print("🌅 [MANUAL] Richiesta di invio manuale rassegna stampa ricevuta...")
-            # Usa override temporaneo per garantire l'invio anche se la funzione è disabilitata
-            def _send_morning_briefing():
-                success = generate_morning_news_briefing()
-                if success:
-                    print("✅ [MANUAL] Rassegna stampa mattutina inviata con successo")
+            import pytz
+            italy_tz = pytz.timezone('Europe/Rome')
+            now = datetime.datetime.now(italy_tz)
+            
+            print(f"🌅 [MANUAL-SAVE] Generazione rassegna stampa per salvataggio - {now.strftime('%H:%M:%S')}")
+            
+            # === GENERA RASSEGNA STAMPA E SALVA ===
+            try:
+                print("📰 [MANUAL-SAVE] Caricamento notizie estese...")
+                # Recupera notizie estese (stesso codice di generate_morning_news_briefing)
+                notizie_estese = get_extended_morning_news()
+                
+                if notizie_estese:
+                    morning_content = []
+                    morning_content.append(f"🌅 RASSEGNA STAMPA MATTUTINA MANUALE - {now.strftime('%d/%m/%Y %H:%M')}")
+                    morning_content.append("=" * 50)
+                    morning_content.append(f"📰 TOP NOTIZIE INTERNAZIONALI ({len(notizie_estese)} articoli)")
+                    morning_content.append("")
+                    
+                    # Raggruppa le notizie per categoria
+                    notizie_per_categoria = {}
+                    for notizia in notizie_estese:
+                        categoria = notizia.get('categoria', 'Generale')
+                        if categoria not in notizie_per_categoria:
+                            notizie_per_categoria[categoria] = []
+                        notizie_per_categoria[categoria].append(notizia)
+                    
+                    # Mostra le notizie divise per categoria
+                    for categoria, notizie_cat in notizie_per_categoria.items():
+                        morning_content.append(f"📂 {categoria.upper()}:")
+                        
+                        for i, notizia in enumerate(notizie_cat[:8], 1):  # Max 8 per categoria
+                            morning_content.append(f"{i}. {notizia['titolo']}")
+                            morning_content.append(f"   📰 {notizia['fonte']} | ⏰ {notizia.get('data', 'Oggi')}")
+                            if notizia.get('link'):
+                                morning_content.append(f"   🔗 {notizia['link']}")
+                            morning_content.append("")  # Riga vuota
+                        
+                        morning_content.append("")  # Separatore tra categorie
+                    
+                    # Salva rassegna stampa
+                    rassegna_path = os.path.join('salvataggi', 'rassegna_stampa_manuale.txt')
+                    with open(rassegna_path, 'w', encoding='utf-8') as f:
+                        f.write("\n".join(morning_content))
+                    print(f"   🌅 Salvato: {rassegna_path} ({len(notizie_estese)} notizie)")
+                    
+                    # Salva anche come CSV per analisi
+                    notizie_csv = []
+                    for notizia in notizie_estese:
+                        notizie_csv.append({
+                            "Titolo": notizia['titolo'],
+                            "Fonte": notizia['fonte'],
+                            "Categoria": notizia['categoria'],
+                            "Data": notizia.get('data', 'Oggi'),
+                            "Link": notizia.get('link', ''),
+                            "Data_Generazione": now.strftime('%Y-%m-%d %H:%M:%S'),
+                            "Tipo": "Rassegna_Manuale"
+                        })
+                    
+                    if notizie_csv:
+                        csv_df = pd.DataFrame(notizie_csv)
+                        csv_path = os.path.join('salvataggi', 'rassegna_stampa_manuale.csv')
+                        csv_df.to_csv(csv_path, index=False, encoding='utf-8-sig')
+                        print(f"   📊 Salvato CSV: {csv_path}")
+                    
+                    print(f"✅ [MANUAL-SAVE] Rassegna stampa salvata con {len(notizie_estese)} notizie")
+                    print("📁 [MANUAL-SAVE] NESSUN messaggio Telegram inviato - solo salvataggio locale")
                 else:
-                    print("❌ [MANUAL] Rassegna stampa mattutina fallita")
-                return success
-            
-            # Chiama con override temporaneo
-            send_with_temporary_override("manual_reports", _send_morning_briefing)
-            
+                    print("⚠️ [MANUAL-SAVE] Nessuna notizia disponibile per la rassegna")
+                    
+            except Exception as e:
+                print(f"❌ [MANUAL-SAVE] Errore nella generazione rassegna stampa: {e}")
+                
         except Exception as e:
-            print(f"❌ [MANUAL] Errore critico durante l'invio manuale rassegna stampa: {e}")
+            print(f"❌ [MANUAL-SAVE] Errore critico durante salvataggio rassegna stampa: {e}")
     
     return no_update
 
@@ -5673,9 +5821,9 @@ def export_summary_csv(n_clicks, timeframe):
             print(f"🔍 [DEBUG] DataFrame vuoto, return None")
             return None
 
-        # RIMUOVERE L'INVIO AUTOMATICO DEI MESSAGGI DURANTE L'ESPORTAZIONE
-        # I messaggi vengono inviati solo tramite scheduler automatico o pulsante manuale
-        print("📊 Esportazione CSV completata (nessun messaggio Telegram inviato)")
+        # ESPORTAZIONE SOLO PER SINCRONIZZAZIONE - NESSUN MESSAGGIO TELEGRAM
+        # I CSV vengono salvati nella cartella salvataggi per sync_system.py
+        print("📊 CSV Indicatori salvato in /salvataggi per sincronizzazione")
 
         # Prepara i dati per l'esportazione
         required_columns = ['Asset', 'MAC', 'RSI', 'MACD', 'Bollinger', 'Stochastic', 'ATR']
@@ -5903,9 +6051,9 @@ def export_csv(n_clicks, selected_horizon):
         df_export = pd.DataFrame(all_results)
         telegram_invite = ""
 
-        # RIMUOVERE L'INVIO AUTOMATICO DEI MESSAGGI DURANTE L'ESPORTAZIONE ML
-        # I messaggi vengono inviati solo tramite scheduler automatico o pulsante manuale
-        print("🤖 Esportazione CSV ML completata (nessun messaggio Telegram inviato)")
+        # ESPORTAZIONE SOLO PER SINCRONIZZAZIONE - NESSUN MESSAGGIO TELEGRAM
+        # I CSV vengono salvati nella cartella salvataggi per sync_system.py
+        print("🤖 CSV Previsioni ML salvato in /salvataggi per sincronizzazione")
 
         # Prepara i dati per l'esportazione
         required_columns = ['Modello', 'Asset', 'Probabilità (%)', 'Accuratezza (%)', 'Segnale', 'Orizzonte']
@@ -6067,56 +6215,13 @@ def schedule_telegram_reports():
                     print(f"ℹ️ [SCHEDULER] Report mensile saltato perché la funzione è disabilitata")
                 time.sleep(60)
             
-            # INVIO RASSEGNA STAMPA MATTUTINA ALLE 09:00 (ora italiana)
-            elif (now.hour == 9 and now.minute == 0):
-                if is_feature_enabled("scheduled_reports"):
-                    try:
-                        print(f"🌅 [SCHEDULER] Trigger delle 09:00 rilevato - Avvio rassegna stampa mattutina...")
-                        
-                        # Chiama la funzione di rassegna stampa mattutina completa
-                        print("📰 [SCHEDULER] Generazione rassegna stampa mattutina...")
-                        success = generate_morning_news_briefing()
-                        
-                        if success:
-                            print("✅ [SCHEDULER] Rassegna stampa mattutina inviata con successo")
-                        else:
-                            print("❌ [SCHEDULER] Rassegna stampa mattutina fallita")
-                        
-                    except Exception as e:
-                        print(f"❌ [SCHEDULER] Errore critico durante la rassegna delle 09:00: {e}")
-                        import traceback
-                        traceback.print_exc()
-                else:
-                    print(f"ℹ️ [SCHEDULER] Rassegna delle 09:00 saltata - funzione scheduled_reports disabilitata")
-                
-                time.sleep(60)  # Pausa per evitare invii multipli nello stesso minuto
+            # RASSEGNA STAMPA MATTUTINA DISABILITATA - SOLO SETTIMANALE/MENSILE
+            # elif (now.hour == 9 and now.minute == 0):
+            #     print(f"ℹ️ [SCHEDULER] Rassegna delle 09:00 disabilitata - manteniamo solo settimanale/mensile")
             
-            # INVIO REPORT GIORNALIERO COMPLETO ALLE 13:00 OGNI GIORNO (ora italiana)
-            elif (now.hour == 13 and now.minute == 0):
-                if is_feature_enabled("scheduled_reports"):
-                    try:
-                        print(f"📸 [SCHEDULER] Trigger delle 13:00 - Report giornaliero completo locale...")
-                        
-                        # REPORT GIORNALIERO COMPLETO (stessa funzione del server ma da locale)
-                        success = generate_unified_report(report_type="daily_snapshot", now=now)
-                        
-                        if success:
-                            # Crea flag per tracking
-                            today_report_file = os.path.join('salvataggi', f'daily_report_sent_{now.strftime("%Y%m%d")}.flag')
-                            with open(today_report_file, 'w') as f:
-                                f.write(f"Daily report sent at {now.strftime('%Y-%m-%d %H:%M:%S')}\n")
-                            print("✅ [SCHEDULER] Report giornaliero completo inviato con successo")
-                        else:
-                            print("❌ [SCHEDULER] Report giornaliero completo fallito")
-                        
-                    except Exception as e:
-                        print(f"❌ [SCHEDULER] Errore critico durante il report giornaliero delle 13:00: {e}")
-                        import traceback
-                        traceback.print_exc()
-                else:
-                    print(f"ℹ️ [SCHEDULER] Report giornaliero delle 13:00 saltato - scheduled_reports disabilitata")
-                
-                time.sleep(60)  # Pausa per evitare invii multipli nello stesso minuto
+            # REPORT GIORNALIERO DISABILITATO - SOLO SETTIMANALE/MENSILE
+            # elif (now.hour == 12 and now.minute == 55):
+            #     print(f"ℹ️ [SCHEDULER] Report giornaliero 13:00 disabilitato - manteniamo solo settimanale/mensile")
             
             time.sleep(30)
 
@@ -6157,14 +6262,64 @@ def smart_keep_alive():
                 print(f"❌ [SMART-KEEPALIVE] Error: {e}")
                 time.sleep(300)  # 5 minutes on error
     
-# Start both threads
+# === SYNC SYSTEM THREAD ===
+def sync_system_thread():
+    """Thread per la sincronizzazione automatica con Render"""
+    if not SYNC_ENABLED:
+        print("❌ [SYNC-THREAD] Sistema di sync disabilitato")
+        return
+
+    import pytz
+    italy_tz = pytz.timezone('Europe/Rome')
+
+    try:
+        # Inizializza il sistema di sync
+        sync = SalvataggieSync(
+            render_url="https://five55-mdye.onrender.com",
+            local_path="C:\\Users\\valen\\555\\salvataggi"
+        )
+        
+        print("🔄 [SYNC-THREAD] Sistema di sincronizzazione avviato")
+        print(f"🌐 [SYNC-THREAD] URL Render: {sync.render_url}")
+        print(f"📁 [SYNC-THREAD] Cartella locale: {sync.local_path}")
+        
+        # Sync iniziale
+        sync.sync_files("auto")
+        
+        # Loop continuo con sync ogni 15 minuti
+        while True:
+            try:
+                now = datetime.datetime.now(italy_tz)
+                print(f"🔄 [SYNC-THREAD] Sync automatico alle {now.strftime('%H:%M:%S')}")
+                sync.sync_files("auto")
+                
+                # Aspetta 15 minuti
+                time.sleep(15 * 60)  # 15 minuti
+                
+            except KeyboardInterrupt:
+                print("🛑 [SYNC-THREAD] Sync interrotto dall'utente")
+                break
+            except Exception as e:
+                print(f"❌ [SYNC-THREAD] Errore nel sync: {e}")
+                time.sleep(60)  # Riprova tra 1 minuto in caso di errore
+                
+    except Exception as e:
+        print(f"❌ [SYNC-THREAD] Errore critico nel thread di sync: {e}")
+
+# Start all threads
 scheduler_thread = threading.Thread(target=schedule_telegram_reports, daemon=True)
 scheduler_thread.start()
 
 keep_alive_thread = threading.Thread(target=smart_keep_alive, daemon=True)
 keep_alive_thread.start()
 
-print("🚀 [THREADS] Both scheduler and smart keep-alive threads started")
+# Avvia il thread di sincronizzazione solo se il sync è abilitato
+if SYNC_ENABLED:
+    sync_thread = threading.Thread(target=sync_system_thread, daemon=True)
+    sync_thread.start()
+    print("🚀 [THREADS] Scheduler, keep-alive e sync threads avviati")
+else:
+    print("🚀 [THREADS] Scheduler e keep-alive threads avviati (sync disabilitato)")
 
 # Configurazione per deployment (Render-compatible)
 import os
