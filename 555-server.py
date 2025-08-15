@@ -54,16 +54,7 @@ TELEGRAM_TOKEN = "8396764345:AAH2aFy5lLAnr4xf-9FU91cWkYIrdG1f7hs"
 TELEGRAM_CHAT_ID = "@abkllr"
 
 # === CONTROLLO FUNZIONI OTTIMIZZATE PER RENDER ===
-FEATURES_ENABLED = {
-    "morning_news": True,          # Rassegna stampa mattutina (09:00)
-    "daily_report": True,          # Report giornaliero (12:55) - con elaborazione sequenziale
-    "sequential_processing": True, # Elaborazione a turni per gestire RAM
-    "memory_cleanup": True        # Pulizia memoria tra le elaborazioni
-}
-
-def is_feature_enabled(feature_name):
-    """Controlla se una funzione è abilitata"""
-    return FEATURES_ENABLED.get(feature_name, True)
+# FEATURES_ENABLED sarà definito più avanti per evitare duplicati
 
 # === FUNZIONE INVIO TELEGRAM ===
 def invia_messaggio_telegram(msg):
@@ -430,10 +421,14 @@ TELEGRAM_CHAT_ID = "@abkllr"
 
 # === CONTROLLO FUNZIONI CON OVERRIDE TEMPORANEO ===
 FEATURES_ENABLED = {
-    "scheduled_reports": True,      # Rapporti programmati (8:00, 18:00)
+    "scheduled_reports": True,      # Rapporti programmati (09:00, 13:00)
     "manual_reports": True,         # Invii manuali da pulsanti
     "backtest_reports": True,       # Backtest settimanali
-    "analysis_reports": True        # Analysis text (8:10)
+    "analysis_reports": True,       # Analysis text (8:10)
+    "morning_news": True,           # Rassegna stampa mattutina (09:00)
+    "daily_report": True,           # Report giornaliero (13:00)
+    "sequential_processing": True,  # Elaborazione a turni per gestire RAM
+    "memory_cleanup": True          # Pulizia memoria tra le elaborazioni
 }
 
 def is_feature_enabled(feature_name):
@@ -6272,6 +6267,32 @@ def schedule_telegram_reports():
             now = datetime.datetime.now(italy_tz)
             print(f"🕐 Orario Italia: {now.strftime('%H:%M:%S')} - {now.strftime('%d/%m/%Y')}")
             
+            # === CONTROLLO RECUPERO RASSEGNA STAMPA MATTUTINA ===
+            try:
+                # Controlla se oggi è già stata inviata la rassegna stampa alle 09:00
+                today_morning_file = os.path.join('salvataggi', f'morning_news_sent_{now.strftime("%Y%m%d")}.flag')
+                
+                # Se è dopo le 09:05 e non è stata ancora inviata, recupera
+                if now.hour >= 9 and now.minute >= 5 and now.hour < 12 and not os.path.exists(today_morning_file):
+                    print(f"🔄 [RECUPERO] Rassegna stampa mattutina non inviata alle 09:00, recupero automatico...")
+                    try:
+                        # Genera rassegna stampa mattutina
+                        success = generate_morning_news_briefing()
+                        
+                        if success:
+                            # Crea flag per evitare invii multipli
+                            with open(today_morning_file, 'w') as f:
+                                f.write(f"Morning news sent at {now.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                            print(f"✅ [RECUPERO] Rassegna stampa mattutina recuperata e inviata con successo")
+                        else:
+                            print(f"❌ [RECUPERO] Rassegna stampa mattutina recupero fallita")
+                            
+                    except Exception as e:
+                        print(f"❌ [RECUPERO] Errore nel recupero rassegna stampa mattutina: {e}")
+                        
+            except Exception as e:
+                print(f"❌ [RECUPERO] Errore controllo recupero rassegna mattutina: {e}")
+            
             # === CONTROLLO RECUPERO REPORT GIORNALIERO MANCATO ===
             try:
                 # Controlla se oggi è già stato inviato il report giornaliero alle 13:00
@@ -6314,6 +6335,10 @@ def schedule_telegram_reports():
                         success = generate_morning_news_briefing()
                         
                         if success:
+                            # Crea flag per tracking
+                            today_morning_file = os.path.join('salvataggi', f'morning_news_sent_{now.strftime("%Y%m%d")}.flag')
+                            with open(today_morning_file, 'w') as f:
+                                f.write(f"Morning news sent at {now.strftime('%Y-%m-%d %H:%M:%S')}\n")
                             print("✅ [SCHEDULER] Rassegna stampa mattutina inviata con successo")
                         else:
                             print("❌ [SCHEDULER] Rassegna stampa mattutina fallita")
