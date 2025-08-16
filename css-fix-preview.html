@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CSS Fix Preview - Indicator Titles in Table Cells</title>
+    <style>
+        /* === CURRENT PROBLEMATIC CSS === */
+        .current-table .dash-cell {
+            padding: 8px 4px;
+            min-width: 80px;
+            white-space: nowrap;        /* This prevents text wrapping */
+            overflow: hidden;
+            text-overflow: ellipsis;    /* Shows ... for long text */
+            border: 1px solid #ddd;
+            background: #f8f9fa;
+        }
+        
+        /* === IMPROVED CSS SOLUTION === */
+        .improved-table .dash-cell {
+            padding: 8px 4px;
+            min-width: 80px;
+            max-width: 150px;           /* Set maximum width */
+            white-space: normal;        /* Allow text wrapping */
+            word-wrap: break-word;      /* Break long words */
+            word-break: break-word;     /* Additional word breaking */
+            overflow: visible;          /* Allow content to be visible */
+            line-height: 1.3;          /* Improve readability */
+            vertical-align: top;       /* Align content to top */
+            border: 1px solid #ddd;
+            background: #e8f5e8;
+        }
+        
+        /* === ALTERNATIVE SOLUTION WITH CONTROLLED HEIGHT === */
+        .alternative-table .dash-cell {
+            padding: 6px 4px;
+            min-width: 80px;
+            max-width: 120px;
+            max-height: 60px;           /* Control maximum height */
+            white-space: normal;
+            word-wrap: break-word;
+            overflow: hidden;           /* Hide overflow */
+            text-overflow: clip;        /* Clean cut instead of ellipsis */
+            line-height: 1.2;
+            vertical-align: top;
+            border: 1px solid #ddd;
+            background: #e8f0ff;
+        }
+        
+        /* === RESPONSIVE ENHANCEMENTS FOR MOBILE === */
+        @media (max-width: 768px) {
+            .improved-table .dash-cell,
+            .alternative-table .dash-cell {
+                font-size: 11px;
+                padding: 4px 2px;
+                min-width: 60px;
+                max-width: 100px;
+            }
+        }
+        
+        /* General styling for demo */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        
+        .demo-section {
+            margin: 30px 0;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        
+        .demo-title {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+        
+        .status-good { color: #28a745; }
+        .status-bad { color: #dc3545; }
+        .status-ok { color: #007bff; }
+    </style>
+</head>
+<body>
+    <h1>🛠️ CSS Fix Preview: Indicator Titles Overflow</h1>
+    
+    <div class="demo-section">
+        <div class="demo-title status-bad">❌ CURRENT PROBLEM: Titles cut off with ellipsis</div>
+        <table class="current-table">
+            <tr>
+                <td class="dash-cell">Moving Average Convergence Divergence Signal</td>
+                <td class="dash-cell">Relative Strength Index Momentum Indicator</td>
+                <td class="dash-cell">Bollinger Bands Volatility Analysis</td>
+                <td class="dash-cell">Exponential Moving Average Trend Signal</td>
+            </tr>
+            <tr>
+                <td class="dash-cell">BUY</td>
+                <td class="dash-cell">SELL</td>
+                <td class="dash-cell">NEUTRAL</td>
+                <td class="dash-cell">BUY</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="demo-section">
+        <div class="demo-title status-good">✅ SOLUTION 1: Text wrapping with controlled width</div>
+        <table class="improved-table">
+            <tr>
+                <td class="dash-cell">Moving Average Convergence Divergence Signal</td>
+                <td class="dash-cell">Relative Strength Index Momentum Indicator</td>
+                <td class="dash-cell">Bollinger Bands Volatility Analysis</td>
+                <td class="dash-cell">Exponential Moving Average Trend Signal</td>
+            </tr>
+            <tr>
+                <td class="dash-cell">BUY</td>
+                <td class="dash-cell">SELL</td>
+                <td class="dash-cell">NEUTRAL</td>
+                <td class="dash-cell">BUY</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="demo-section">
+        <div class="demo-title status-ok">🔄 SOLUTION 2: Controlled height with clean truncation</div>
+        <table class="alternative-table">
+            <tr>
+                <td class="dash-cell">Moving Average Convergence Divergence Signal</td>
+                <td class="dash-cell">Relative Strength Index Momentum Indicator</td>
+                <td class="dash-cell">Bollinger Bands Volatility Analysis</td>
+                <td class="dash-cell">Exponential Moving Average Trend Signal</td>
+            </tr>
+            <tr>
+                <td class="dash-cell">BUY</td>
+                <td class="dash-cell">SELL</td>
+                <td class="dash-cell">NEUTRAL</td>
+                <td class="dash-cell">BUY</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="demo-section">
+        <h3>📋 Recommended CSS Changes for 555-server.py</h3>
+        <pre style="background: #f1f3f4; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 13px;">
+/* REPLACE the existing .dash-table .dash-cell CSS (lines 259-265) with: */
+
+.dash-table .dash-cell {
+    padding: 8px 4px;
+    min-width: 80px;
+    max-width: 150px;           /* Prevent cells from growing too wide */
+    white-space: normal;        /* Allow text to wrap to multiple lines */
+    word-wrap: break-word;      /* Break long words that don't fit */
+    word-break: break-word;     /* Additional word breaking support */
+    overflow: visible;          /* Show all content, don't hide */
+    line-height: 1.3;          /* Improve line spacing for readability */
+    vertical-align: top;       /* Align cell content to top */
+}
+
+/* OPTIONAL: Add responsive adjustments for mobile */
+@media (max-width: 479px) {
+    .dash-table .dash-cell {
+        font-size: 10px;
+        padding: 4px 2px;
+        min-width: 60px;
+        max-width: 100px;       /* Smaller max width on small screens */
+    }
+}
+        </pre>
+    </div>
+    
+    <div class="demo-section">
+        <h3>🎯 Key Changes Explained</h3>
+        <ul style="line-height: 1.6;">
+            <li><strong>white-space: normal</strong> - Allows text to wrap to multiple lines instead of staying on one line</li>
+            <li><strong>max-width: 150px</strong> - Prevents cells from becoming too wide, forcing text to wrap</li>
+            <li><strong>word-wrap: break-word</strong> - Breaks long words that would otherwise overflow</li>
+            <li><strong>overflow: visible</strong> - Shows all content instead of hiding it</li>
+            <li><strong>vertical-align: top</strong> - Keeps content aligned nicely when cells have different heights</li>
+            <li><strong>line-height: 1.3</strong> - Improves readability when text wraps to multiple lines</li>
+        </ul>
+    </div>
+</body>
+</html>

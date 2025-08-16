@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CSS Fix - Solo Titoli Indicatori</title>
+    <style>
+        /* === CURRENT CSS === */
+        .current-table .dash-cell {
+            padding: 8px 4px;
+            min-width: 80px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            border: 1px solid #ddd;
+            background: #f8f9fa;
+            text-align: center;
+        }
+        
+        /* === IMPROVED CSS - Solo per titoli === */
+        .improved-table .dash-cell {
+            padding: 8px 4px;
+            min-width: 80px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            border: 1px solid #ddd;
+            background: #f8f9fa;
+            text-align: center;
+        }
+        
+        /* Stile specifico SOLO per le celle header con titoli degli indicatori */
+        .improved-table .dash-cell.title-cell {
+            white-space: normal;        /* Solo i titoli possono andare a capo */
+            word-wrap: break-word;      /* Solo i titoli possono spezzare parole lunghe */
+            max-width: 120px;           /* Larghezza massima solo per titoli */
+            line-height: 1.2;          /* Migliore leggibilità per titoli multiriga */
+            vertical-align: top;       /* Allineamento in alto per titoli */
+            font-weight: 600;          /* Titoli in grassetto */
+            background: #e8f5e8;
+        }
+        
+        /* General styling */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        
+        .demo-section {
+            margin: 30px 0;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        
+        .demo-title {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+        
+        .status-good { color: #28a745; }
+        .status-bad { color: #dc3545; }
+    </style>
+</head>
+<body>
+    <h1>🎯 CSS Fix: Solo Titoli Indicatori</h1>
+    
+    <div class="demo-section">
+        <div class="demo-title status-bad">❌ CURRENT: Titoli tagliati con "..."</div>
+        <table class="current-table">
+            <tr>
+                <td class="dash-cell">Moving Average Convergence Divergence</td>
+                <td class="dash-cell">Relative Strength Index</td>
+                <td class="dash-cell">Bollinger Bands Analysis</td>
+                <td class="dash-cell">Exponential Moving Average</td>
+            </tr>
+            <tr>
+                <td class="dash-cell">BUY</td>
+                <td class="dash-cell">SELL</td>
+                <td class="dash-cell">NEUTRAL</td>
+                <td class="dash-cell">BUY</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="demo-section">
+        <div class="demo-title status-good">✅ FIXED: Solo titoli si adattano, valori restano normali</div>
+        <table class="improved-table">
+            <tr>
+                <td class="dash-cell title-cell">Moving Average Convergence Divergence</td>
+                <td class="dash-cell title-cell">Relative Strength Index</td>
+                <td class="dash-cell title-cell">Bollinger Bands Analysis</td>
+                <td class="dash-cell title-cell">Exponential Moving Average</td>
+            </tr>
+            <tr>
+                <td class="dash-cell">BUY</td>
+                <td class="dash-cell">SELL</td>
+                <td class="dash-cell">NEUTRAL</td>
+                <td class="dash-cell">BUY</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="demo-section">
+        <h3>📋 CSS da aggiungere in 555-server.py</h3>
+        <pre style="background: #f1f3f4; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 13px;">
+/* AGGIUNGI questo CSS dopo la riga 265 (dopo .dash-table .dash-cell) */
+
+/* Stile specifico per le celle con titoli degli indicatori */
+.dash-table .dash-cell.indicator-title {
+    white-space: normal;        /* Solo i titoli possono andare a capo */
+    word-wrap: break-word;      /* Solo i titoli spezzano parole lunghe */
+    max-width: 120px;           /* Larghezza massima solo per titoli */
+    line-height: 1.2;          /* Migliore spaziatura per titoli multiriga */
+    vertical-align: top;       /* Allineamento in alto */
+    font-weight: 600;          /* Titoli in grassetto */
+}
+
+/* Responsive per mobile */
+@media (max-width: 479px) {
+    .dash-table .dash-cell.indicator-title {
+        font-size: 10px;
+        max-width: 80px;
+        padding: 4px 2px;
+    }
+}
+        </pre>
+    </div>
+    
+    <div class="demo-section">
+        <h3>🔧 Come applicare nel codice Dash</h3>
+        <pre style="background: #f8f8f2; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 13px;">
+# Quando crei le tabelle Dash, aggiungi la classe CSS ai titoli:
+
+dash_table.DataTable(
+    id='indicators-table',
+    columns=[
+        {"name": "Moving Average Convergence Divergence", "id": "MACD", 
+         "type": "text", "presentation": "markdown"},
+        {"name": "Relative Strength Index", "id": "RSI", 
+         "type": "text", "presentation": "markdown"},
+        # ... altri indicatori
+    ],
+    style_header_conditional=[
+        {
+            'if': {'column_id': col},
+            'className': 'indicator-title'  # Applica la classe solo ai titoli
+        } for col in ['MACD', 'RSI', 'Bollinger', 'EMA']  # Lista degli indicatori
+    ]
+)
+        </pre>
+    </div>
+    
+    <div class="demo-section">
+        <h3>💡 Cosa cambia</h3>
+        <ul style="line-height: 1.6;">
+            <li>✅ <strong>Solo i titoli degli indicatori</strong> si adattano e vanno a capo</li>
+            <li>✅ <strong>I valori BUY/SELL/NEUTRAL</strong> rimangono su una sola riga</li>
+            <li>✅ <strong>Larghezza controllata</strong> solo per i titoli (max 120px)</li>
+            <li>✅ <strong>Titoli in grassetto</strong> per distinguerli meglio</li>
+            <li>✅ <strong>Responsive</strong> anche su mobile</li>
+        </ul>
+    </div>
+</body>
+</html>

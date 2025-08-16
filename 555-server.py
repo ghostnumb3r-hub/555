@@ -15,6 +15,46 @@ import pytz
 from urllib.request import urlopen
 from urllib.error import URLError
 
+# === SISTEMA FLAG IN-MEMORY PER RENDER ===
+# Variabili globali per tracciare invii giornalieri
+GLOBAL_FLAGS = {
+    "morning_news_sent": False,
+    "daily_report_sent": False,
+    "last_reset_date": datetime.datetime.now().strftime("%Y%m%d")
+}
+
+def reset_daily_flags_if_needed():
+    """Resetta i flag se è passata la mezzanotte"""
+    current_date = datetime.datetime.now().strftime("%Y%m%d")
+    if GLOBAL_FLAGS["last_reset_date"] != current_date:
+        GLOBAL_FLAGS["morning_news_sent"] = False
+        GLOBAL_FLAGS["daily_report_sent"] = False
+        GLOBAL_FLAGS["last_reset_date"] = current_date
+        print(f"🔄 [FLAGS] Reset giornaliero completato per {current_date}")
+        return True
+    return False
+
+def set_message_sent_flag(message_type):
+    """Imposta il flag di invio per il tipo di messaggio"""
+    reset_daily_flags_if_needed()  # Verifica reset automatico
+    
+    if message_type == "morning_news":
+        GLOBAL_FLAGS["morning_news_sent"] = True
+        print("✅ [FLAGS] Flag morning_news_sent impostato su True")
+    elif message_type == "daily_report":
+        GLOBAL_FLAGS["daily_report_sent"] = True
+        print("✅ [FLAGS] Flag daily_report_sent impostato su True")
+
+def is_message_sent_today(message_type):
+    """Verifica se il messaggio è già stato inviato oggi"""
+    reset_daily_flags_if_needed()  # Verifica reset automatico
+    
+    if message_type == "morning_news":
+        return GLOBAL_FLAGS["morning_news_sent"]
+    elif message_type == "daily_report":
+        return GLOBAL_FLAGS["daily_report_sent"]
+    return False
+
 # === OTTIMIZZAZIONI PERFORMANCE 555-TURBO ===
 try:
     from performance_config import (
@@ -222,6 +262,25 @@ app.index_string = '''
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
+            }
+            
+            /* Stile specifico per le celle con titoli degli indicatori */
+            .dash-table .dash-cell.indicator-title {
+                white-space: normal;        /* Solo i titoli possono andare a capo */
+                word-wrap: break-word;      /* Solo i titoli spezzano parole lunghe */
+                max-width: 120px;           /* Larghezza massima solo per titoli */
+                line-height: 1.2;          /* Migliore spaziatura per titoli multiriga */
+                vertical-align: top;       /* Allineamento in alto */
+                font-weight: 600;          /* Titoli in grassetto */
+            }
+            
+            /* Responsive per mobile - solo titoli indicatori */
+            @media (max-width: 479px) {
+                .dash-table .dash-cell.indicator-title {
+                    font-size: 10px;
+                    max-width: 80px;
+                    padding: 4px 2px;
+                }
             }
             
             .dash-table .dash-header {
@@ -461,8 +520,16 @@ app.index_string = '''
                     font-size: 13px;
                 }
                 
-                h1 { font-size: 1.5rem; }
-                h2 { font-size: 1.3rem; }
+                h1 { 
+                    font-size: 1.4rem; 
+                    font-weight: 700;
+                    text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+                    letter-spacing: -0.5px;
+                }
+                h2 { 
+                    font-size: 1.2rem;
+                    font-weight: 600;
+                }
                 
                 button, .dash-button {
                     padding: 10px 14px;
@@ -6612,8 +6679,8 @@ def schedule_telegram_reports():
                 # Controlla se oggi è già stata inviata la rassegna stampa alle 09:00
                 today_morning_file = os.path.join('salvataggi', f'morning_news_sent_{now.strftime("%Y%m%d")}.flag')
                 
-                # Se è dopo le 09:05 e non è stata ancora inviata, recupera
-                if now.hour >= 9 and now.minute >= 5 and now.hour < 12 and not os.path.exists(today_morning_file):
+                # Se è dopo le 09:05 e prima delle 13:00 e non è stato ancora inviato, recupera
+                if now.hour >= 9 and now.minute >= 5 and now.hour < 13 and not os.path.exists(today_morning_file):
                     print(f"🔄 [RECUPERO] Rassegna stampa mattutina non inviata alle 09:00, recupero automatico...")
                     try:
                         # Genera rassegna stampa mattutina
@@ -6638,8 +6705,8 @@ def schedule_telegram_reports():
                 # Controlla se oggi è già stato inviato il report giornaliero alle 13:00
                 today_report_file = os.path.join('salvataggi', f'daily_report_sent_{now.strftime("%Y%m%d")}.flag')
                 
-                # Se è dopo le 13:05 e non è stato ancora inviato, recupera
-                if now.hour >= 13 and now.minute >= 5 and not os.path.exists(today_report_file):
+                # Se è dopo le 13:05 e prima delle 17:00 e non è stato ancora inviato, recupera
+                if now.hour >= 13 and now.minute >= 5 and now.hour < 17 and not os.path.exists(today_report_file):
                     print(f"🔄 [RECUPERO] Report giornaliero non inviato alle 13:00, recupero automatico...")
                     try:
                         # Genera report giornaliero completo (stessa funzione del server)

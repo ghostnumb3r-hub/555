@@ -292,7 +292,7 @@ Report mensile che non è solo una "fotografia" del momento, ma una **analisi ev
 
 ### 🔄 SISTEMA SINCRONIZZAZIONE
 **File**: sync_system.py
-**URL**: https://five55-qqcs.onrender.com
+**URL**: https://five55-jc4t.onrender.com ⭐ AGGIORNATO
 **Cartella locale**: C:\Users\valen\555\salvataggi
 **Frequenza**: Ogni 15 minuti automatico
 **Files sincronizzati**: analysis_text.txt, segnali_tecnici.csv, previsioni_ml.csv, weekly_report_enhanced.txt
@@ -433,14 +433,14 @@ Report mensile che non è solo una "fotografia" del momento, ma una **analisi ev
 - Notizie critiche con ranking automatico
 - Eventi calendario economico imminenti
 - Analisi sentiment e ML
-- Sistema recovery automatico 09:05-12:00 se non inviata
+- ⏰ **Sistema recovery esteso**: 09:05-22:00 se non inviata
 
 **📊 Report Giornaliero (13:00)** - 4 Parti:
 1. Indicatori tecnici + Modelli ML + Confronto
 2. Notizie critiche con impatto
 3. Analisi ML delle notizie
 4. Calendario eventi + Analisi ML calendario
-- Sistema recovery automatico se fallisce invio
+- ⏰ **Sistema recovery esteso**: 13:05-22:00 se fallisce invio
 
 **📈 Report Settimanale (Lunedì 13:05)**:
 - Gestito dal sistema locale (555.py) 
@@ -686,3 +686,58 @@ Report mensile che non è solo una "fotografia" del momento, ma una **analisi ev
 **Risultato atteso**: Sistema robusto al 100% entro 18 agosto
 **Beneficio**: Report settimanali e mensili automaticamente migliori
 **Timeline**: 1 settimana intensiva di fix → Mesi di sviluppo fluido
+
+## AGGIORNAMENTO URL DEPLOY RENDER (16 Agosto 2025)
+
+### 🌐 **CAMBIO URL DEPLOY OPERATIVO**
+**Data**: 16 Agosto 2025, ore 13:30 CET
+**Motivo**: Deploy precedente non più operativo
+
+**🔧 Modifiche Implementate**:
+1. **sync_system.py** aggiornato:
+   - Da: `https://five55-qqcs.onrender.com`
+   - A: `https://five55-jc4t.onrender.com` ⭐ NUOVO
+
+2. **555-server.py** NON modificato (approccio intelligente):
+   - Mantiene URL fallback: `https://five55-dd08.onrender.com`
+   - Legge variabile d'ambiente: `RENDER_EXTERNAL_URL`
+   - **Azione richiesta**: Impostare `RENDER_EXTERNAL_URL=https://five55-jc4t.onrender.com` su Render
+
+### 🎯 **SISTEMA RECOVERY MIGLIORATO**
+**Finestra recovery estesa**: 09:05-22:00 per entrambi i messaggi
+- **Mattutino (09:00)**: Recovery fino alle 22:00 se non inviato
+- **Giornaliero (13:00)**: Recovery fino alle 22:00 se non inviato
+**Beneficio**: Maggiore affidabilità degli invii automatici
+
+### ✅ **STATO MESSAGGI 16/08/2025**
+- **Rassegna Stampa (09:00)**: ✅ Inviata (flag creato)
+- **Report Giornaliero (14:30)**: ✅ Inviato (flag creato)
+- **Risultato**: 2/2 messaggi completati oggi
+
+### 🔄 **COORDINAMENTO LOCALE-RENDER**
+Sistema di file `.flag` per evitare duplicati:
+- Ogni messaggio crea file: `morning_news_sent_YYYYMMDD.flag` / `daily_report_sent_YYYYMMDD.flag`
+- Sync automatico tra locale e Render via API
+- Zero duplicati garantiti
+
+**Prossimi passi**: Configurare variabile d'ambiente su Render per completare transizione
+
+## 📋 LISTA AGGIORNAMENTO AUTOMATICO URL RENDER
+
+### 🎯 **PUNTI DA AGGIORNARE CON NUOVO URL**
+Quando ricevo il nuovo URL Render, aggiornerò automaticamente questi punti:
+
+#### **📂 FILE DA MODIFICARE:**
+1. **sync_system.py** (linea ~163) - URL principale sync
+2. **555.py** (linea ~6278) - URL thread sync locale  
+3. **555-server.py** (linea ~6730) - URL fallback
+
+#### **⚙️ VARIABILE D'AMBIENTE:**
+4. **Render Dashboard** - `RENDER_EXTERNAL_URL`
+
+#### **📝 DOCUMENTAZIONE:**
+5. **RIASSUNTO_555.txt** - Aggiornare sezioni con nuovo URL
+6. **Log stato corrente** - Registrare cambio e data
+
+---
+**💡 PROCESSO**: Tu mi dai il nuovo URL → Io aggiorno tutti i 6 punti automaticamente

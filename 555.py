@@ -6275,7 +6275,7 @@ def sync_system_thread():
     try:
         # Inizializza il sistema di sync
         sync = SalvataggieSync(
-            render_url="https://five55-qqcs.onrender.com",
+            render_url="https://five55-jc4t.onrender.com",
             local_path="C:\\Users\\valen\\555\\salvataggi"
         )
         
