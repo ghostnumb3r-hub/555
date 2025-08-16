@@ -96,6 +96,16 @@ TELEGRAM_CHAT_ID = "@abkllr"
 # === CONTROLLO FUNZIONI OTTIMIZZATE PER RENDER ===
 # FEATURES_ENABLED sarà definito più avanti per evitare duplicati
 
+# === SISTEMA BACKUP RENDER → DRIVE ===
+try:
+    from render_drive_backup import RenderDriveBackup
+    print("🔄 [RENDER-BACKUP] Sistema backup Render-Drive caricato!")
+    BACKUP_SYSTEM_ENABLED = True
+except ImportError:
+    print("⚠️ [RENDER-BACKUP] File render_drive_backup.py non trovato")
+    RenderDriveBackup = None
+    BACKUP_SYSTEM_ENABLED = False
+
 # === FUNZIONE INVIO TELEGRAM ===
 def invia_messaggio_telegram(msg):
     """Invia messaggio Telegram con gestione memoria ottimizzata"""
@@ -6785,6 +6795,34 @@ def schedule_telegram_reports():
                     print(f"ℹ️ [SCHEDULER] Report giornaliero delle 13:00 saltato - scheduled_reports disabilitata")
                 
                 time.sleep(60)  # Pausa per evitare invii multipli nello stesso minuto
+            
+            # === BACKUP AUTOMATICO GIORNALIERO ALLE 17:05 ===
+            elif (now.hour == 17 and now.minute == 5):
+                if BACKUP_SYSTEM_ENABLED:
+                    try:
+                        print(f"💾 [BACKUP] Trigger delle 17:05 - Avvio backup automatico giornaliero...")
+                        
+                        # Inizializza sistema backup
+                        backup_system = RenderDriveBackup()
+                        backup_success = backup_system.execute_daily_backup()
+                        
+                        if backup_success:
+                            # Crea flag per tracking
+                            today_backup_file = os.path.join('salvataggi', f'backup_sent_{now.strftime("%Y%m%d")}.flag')
+                            with open(today_backup_file, 'w') as f:
+                                f.write(f"Backup completed at {now.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                            print("✅ [BACKUP] Backup giornaliero completato con successo")
+                        else:
+                            print("❌ [BACKUP] Backup giornaliero fallito")
+                        
+                    except Exception as e:
+                        print(f"❌ [BACKUP] Errore critico durante il backup delle 17:05: {e}")
+                        import traceback
+                        traceback.print_exc()
+                else:
+                    print(f"ℹ️ [BACKUP] Backup delle 17:05 saltato - sistema backup non disponibile")
+                
+                time.sleep(60)  # Pausa per evitare backup multipli nello stesso minuto
             
             time.sleep(30)
 

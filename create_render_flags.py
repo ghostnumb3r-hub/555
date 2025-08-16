@@ -6,7 +6,7 @@ import requests
 import datetime
 
 def create_render_flags():
-    render_url = 'https://five55-jc4t.onrender.com'
+            render_url="https://five55-7ozo.onrender.com",
     italy_tz = datetime.timezone(datetime.timedelta(hours=1))
     today = datetime.datetime.now(italy_tz).strftime('%Y%m%d')
 
