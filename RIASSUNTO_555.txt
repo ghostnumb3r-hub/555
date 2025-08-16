@@ -1,5 +1,13 @@
-# RIASSUNTO FINALE PROGETTO DASHBOARD 555 E BACKTESTANALYZER
-**Aggiornato al: 10 Agosto 2025, 19:57 CET - SISTEMA OPERATIVO + STRATEGIA SVILUPPO DEFINITA**
+# RIASSUNTO PROGETTO DASHBOARD 555 E BACKTESTANALYZER
+**⚠️ NOTA: Questo file è stato consolidato in `DOCUMENTAZIONE_COMPLETA_555.md`**
+**Aggiornato al: 15 Agosto 2025, 23:36 CET - DOCUMENTAZIONE CONSOLIDATA**
+
+**📋 Per la documentazione completa e aggiornata, consultare:**
+- `DOCUMENTAZIONE_COMPLETA_555.md` - Documentazione unificata e completa del sistema
+
+---
+
+# VERSIONE LEGACY - MANTENUTA PER RIFERIMENTO STORICO
 
 ## PANORAMICA DEL SISTEMA
 
@@ -247,13 +255,47 @@ Report mensile che non è solo una "fotografia" del momento, ma una **analisi ev
 - **Pianificato**: Implementazione logica consequenziale settimane precedenti
 - **Target**: Report mensile v2.0 con analisi storica completa
 
-## STATO SISTEMA E OTTIMIZZAZIONI (10 Agosto 2025 - AGGIORNAMENTO COMPLETO)
+## STATO SISTEMA CORRENTE (15 Agosto 2025 - DEPLOY RENDER OPERATIVO)
 
-### ✅ SISTEMA COMPLETAMENTE OPERATIVO - VERIFICA LIVE
-**Data verifica**: 10 Agosto 2025, ore 16:25 CET
-**Stato dashboard**: ✅ ATTIVA su http://localhost:8050
-**Sistema di cache**: ⚡ OTTIMIZZATO (22 entries, hit rate ~95%)
-**Report automatici**: 🚀 FUNZIONANTI con suddivisione messaggi intelligente
+### 🌐 DEPLOYMENT RENDER ATTIVO
+**URL Deploy**: https://five55-qqcs.onrender.com ✅ ONLINE
+**Data ultimo deploy**: 15 Agosto 2025, ore 22:17 CET
+**Environment**: Render (Port 10000)
+**Status**: Sistema completamente operativo con scheduling automatico
+
+### 🏗️ ARCHITETTURA CORRENTE (15 Agosto 2025)
+
+**📁 SISTEMA DUAL-MODE**:
+- **555-server.py**: Deploy su Render (https://five55-qqcs.onrender.com)
+  - Report automatici programmati: 09:00 (rassegna stampa) + 13:00 (report giornaliero)
+  - Sistema recovery automatico se messaggi non inviati
+  - Keep-alive ottimizzato per Render
+  - API endpoints per sincronizzazione
+- **555.py**: Sistema locale (disabilitato per invii Telegram)
+  - Solo backup locale e generazione file
+  - Funzionalità sync con Render
+
+### ⚙️ CONFIGURAZIONE FEATURES ATTIVE
+
+**🌐 Su Render (555-server.py)**:
+- scheduled_reports: ✅ True (09:00 + 13:00)
+- morning_news: ✅ True (rassegna stampa mattutina)
+- daily_report: ✅ True (report giornaliero 4 parti)
+- sequential_processing: ✅ True (gestione RAM ottimizzata)
+- memory_cleanup: ✅ True (pulizia memoria tra elaborazioni)
+
+**💻 Locale (555.py)**:
+- scheduled_reports: ❌ False
+- manual_reports: ❌ False  
+- backtest_reports: ✅ True (solo backtest settimanali)
+- analysis_reports: ❌ False
+
+### 🔄 SISTEMA SINCRONIZZAZIONE
+**File**: sync_system.py
+**URL**: https://five55-qqcs.onrender.com
+**Cartella locale**: C:\Users\valen\555\salvataggi
+**Frequenza**: Ogni 15 minuti automatico
+**Files sincronizzati**: analysis_text.txt, segnali_tecnici.csv, previsioni_ml.csv, weekly_report_enhanced.txt
 
 ### 📊 DATI OPERATIVI CORRENTI (Live dal sistema)
 **Analysis text generato**: 6,126 caratteri (10/08/2025 16:25 CET)
@@ -313,7 +355,107 @@ Report mensile che non è solo una "fotografia" del momento, ma una **analisi ev
 - Framework ML pronto per integrazione algoritmi avanzati
 - Sistema messaging Telegram ottimizzato per report complessi
 
-## ANALISI SISTEMA OPERATIVO LIVE (10 Agosto 2025, 16:25 CET)
+### 🧹 **PULIZIA CODICE RICHIESTA (15 Agosto 2025)**
+⚠️ **AZIONE NECESSARIA**: Pulizia del codice per rimuovere righe obsolete
+
+**Codice da pulire in 555.py e 555-server.py:**
+- ❌ Riferimenti agli orari **18:00** (non più utilizzati)
+- ❌ Riferimenti agli orari **08:00** (sostituiti con 09:00)
+- ❌ Variabili `fixed_time = "18:00:00"` obsolete
+- ❌ Commenti e documentazione con orari non più validi
+- ❌ Logica di invio duplicata tra sistemi locale/render
+- ❌ Callback functions per pulsanti manuali rimossi ma codice morto rimasto
+- ❌ Import di moduli eliminati (accuracy_reports, portfolio_bridge, etc.)
+- ❌ Riferimenti a file eliminati (monthly_report_generator, render_ram_optimizer)
+- ❌ Configurazioni FEATURES_ENABLED duplicate o obsolete
+
+**Benefici attesi dalla pulizia:**
+- 🪶 Codice più leggero e veloce da caricare
+- 🎯 Manutenzione semplificata
+- 📚 Documentazione coerente con funzionalità attive
+- 🐛 Eliminazione potenziali bug da codice morto
+- ⚡ Performance migliorate
+
+**Priorità:** MEDIA - Da fare nelle prossime sessioni di sviluppo
+
+### 📖 **CREAZIONE README.MD RICHIESTA (15 Agosto 2025)**
+⚠️ **AZIONE NECESSARIA**: Creare un README.md professionale per il progetto
+
+**Contenuto README.md da includere:**
+- 🎯 **Panoramica del Sistema**: Descrizione Dashboard 555 con funzionalità principali
+- 🚀 **Quick Start Guide**: Installazione e avvio rapido per nuovi utenti
+- ⚙️ **Configurazione**: Setup Telegram, API keys, environment variables
+- 📁 **Struttura Progetto**: Spiegazione file core e cartelle
+- 🔧 **Deployment**: Istruzioni per deploy locale e Render
+- 📊 **Features**: Lista completa funzionalità (17 indicatori + 19 modelli ML)
+- 📱 **Sistema PWA**: Istruzioni per installazione mobile
+- 🔄 **Sincronizzazione**: Come funziona il sync locale-Render
+- 🛡️ **Privacy**: Sistema dual-storage e calibrazione ML privacy-safe
+- 📅 **Scheduling**: Orari automatici report (09:00, 13:00, settimanali)
+- 🐛 **Troubleshooting**: Soluzioni errori comuni
+- 🤝 **Contributing**: Guidelines per contributi al progetto
+- 📜 **License**: Informazioni licenza d'uso
+
+**Struttura README consigliata:**
+```markdown
+# 📊 Dashboard 555 - Sistema Analisi Finanziaria Completo
+
+## 🎯 Panoramica
+## 🚀 Quick Start
+## ⚙️ Configurazione
+## 📁 Struttura Progetto
+## 🔧 Deployment
+## 📊 Funzionalità
+## 📱 PWA Mobile
+## 🔄 Sincronizzazione
+## 🛡️ Privacy e Sicurezza
+## 📅 Report Automatici
+## 🐛 Troubleshooting
+## 🤝 Contributing
+## 📜 License
+```
+
+**Benefici README professionale:**
+- 📚 Documentazione accessibile per nuovi utenti
+- 🎯 Onboarding rapido per sviluppatori
+- 🔍 Migliore scopribilità su GitHub/repository
+- 💼 Aspetto professionale del progetto
+- 🛠️ Riduzione supporto per domande comuni
+- ⚡ Setup più veloce per deploy
+
+**Priorità:** MEDIA - Da creare nelle prossime sessioni
+
+## STATUS TELEGRAM E ORARI PROGRAMMATI (15 Agosto 2025)
+
+### 📱 MESSAGGI TELEGRAM AUTOMATICI CORRENTI
+
+**🌅 Rassegna Stampa Mattutina (09:00)**:
+- Notizie critiche con ranking automatico
+- Eventi calendario economico imminenti
+- Analisi sentiment e ML
+- Sistema recovery automatico 09:05-12:00 se non inviata
+
+**📊 Report Giornaliero (13:00)** - 4 Parti:
+1. Indicatori tecnici + Modelli ML + Confronto
+2. Notizie critiche con impatto
+3. Analisi ML delle notizie
+4. Calendario eventi + Analisi ML calendario
+- Sistema recovery automatico se fallisce invio
+
+**📈 Report Settimanale (Lunedì 13:05)**:
+- Gestito dal sistema locale (555.py) 
+- Backtest e performance settimanali
+- Solo se abilitato: backtest_reports = True
+
+**🗓️ Report Mensile (1° mese 13:00)**:
+- Pianificato per implementazione (25 agosto circa)
+- Twitter integration pianificata per stesso periodo
+
+### 🔧 CONFIGURAZIONE ORARI CORRENTI
+- **Timezone**: Europe/Rome (CET/CEST)
+- **Keep-alive attivo**: 07:45-22:00 (ping ogni ora)
+- **Keep-alive notturno**: 22:00-07:45 (ping ogni 3 ore)
+- **Recovery window**: 30 minuti dopo orario mancato
 
 ### 📊 SNAPSHOT STATO CORRENTE DEL SISTEMA
 **Momento analisi**: Durante esecuzione attiva dashboard 555.py

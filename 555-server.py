@@ -278,6 +278,67 @@ app.index_string = '''
                 margin: 2px;
             }
             
+            /* === MOBILE OPTIMIZATION ENHANCEMENTS === */
+            
+            /* Tab ottimizzati per mobile */
+            .tab {
+                min-height: 48px;
+                padding: 8px 12px;
+                font-size: 13px;
+                text-align: center;
+            }
+            
+            /* Header della dashboard mobile-friendly */
+            .dashboard-header {
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+                padding: 15px 10px;
+            }
+            
+            /* Pulsanti layout mobile */
+            .button-group {
+                display: flex;
+                flex-direction: column;
+                width: 100%;
+                gap: 8px;
+            }
+            
+            /* Input e controlli ottimizzati */
+            input, select, .Select-control {
+                min-height: 44px;
+                font-size: 16px; /* Previene zoom su iOS */
+                padding: 12px;
+                border-radius: 8px;
+            }
+            
+            /* Tabelle più compatte su mobile */
+            .dash-table .dash-cell {
+                font-size: 11px;
+                padding: 6px 4px;
+                text-align: center;
+            }
+            
+            /* Fix per grafici su mobile */
+            .js-plotly-plot {
+                width: 100% !important;
+                height: auto !important;
+                min-height: 300px;
+            }
+            
+            /* Card stack su mobile */
+            .card-stack {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            /* Emoji e icone più visibili */
+            .emoji {
+                font-size: 1.2em;
+                line-height: 1;
+            }
+            
             /* === MEDIA QUERIES === */
             
             /* Tablet (768px+) */
@@ -307,6 +368,18 @@ app.index_string = '''
                 .card, .section {
                     padding: 20px;
                     margin: 15px 0;
+                }
+                
+                /* Layout migliorato per tablet */
+                .dashboard-header {
+                    flex-direction: row;
+                    justify-content: space-between;
+                }
+                
+                .button-group {
+                    flex-direction: row;
+                    width: auto;
+                    gap: 10px;
                 }
             }
             
@@ -366,6 +439,56 @@ app.index_string = '''
                 .dash-table .dash-header {
                     background-color: #444;
                     color: white;
+                }
+                
+                /* Dark mode per mobile */
+                button {
+                    background-color: #28a745;
+                    border-color: #1e7e34;
+                }
+                
+                input, select {
+                    background-color: #2d2d2d;
+                    border-color: #444;
+                    color: #e9ecef;
+                }
+            }
+            
+            /* === SMALL MOBILE SCREENS (320px-479px) === */
+            @media (max-width: 479px) {
+                body {
+                    padding: 8px;
+                    font-size: 13px;
+                }
+                
+                h1 { font-size: 1.5rem; }
+                h2 { font-size: 1.3rem; }
+                
+                button, .dash-button {
+                    padding: 10px 14px;
+                    font-size: 13px;
+                    width: 100%;
+                    margin: 3px 0;
+                }
+                
+                .dash-table .dash-cell {
+                    font-size: 10px;
+                    padding: 4px 2px;
+                    min-width: 60px;
+                }
+                
+                .card, .section {
+                    padding: 12px;
+                    margin: 8px 0;
+                }
+                
+                /* Stack tutto verticalmente su schermi piccoli */
+                .row {
+                    flex-direction: column;
+                }
+                
+                .col {
+                    min-width: 100%;
                 }
             }
         </style>
@@ -545,81 +668,188 @@ def invia_messaggio_telegram(msg):
         return _send_single_message(clean_msg, url)
 
 
-def _send_single_message(clean_msg, url):
+def _send_single_message_with_advanced_fallback(clean_msg, url, max_retries=3, backoff_factor=2.0):
+    """Versione avanzata con retry automatico, timeout progressivo e fallback multipli"""
     
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": clean_msg,
-        "parse_mode": "Markdown"  # Abilita formattazione Markdown
+    # Sistema di timeout progressivo: inizia con 10s, aumenta a ogni retry
+    timeout_progression = [10, 15, 20, 25]  # 4 tentativi con timeout crescente
+    
+    # Strategie di fallback in ordine di priorità
+    fallback_strategies = [
+        {"parse_mode": "Markdown", "name": "Markdown Completo", "msg_processor": lambda x: x},
+        {"parse_mode": "MarkdownV2", "name": "MarkdownV2", "msg_processor": lambda x: x.replace('*', '\\*').replace('_', '\\_').replace('`', '\\`')},
+        {"parse_mode": "HTML", "name": "HTML", "msg_processor": lambda x: x.replace('*', '<b>').replace('*', '</b>').replace('_', '<i>').replace('_', '</i>')},
+        {"parse_mode": None, "name": "Testo Semplice", "msg_processor": lambda x: x.replace('*', '').replace('_', '').replace('`', '')}
+    ]
+    
+    print(f"🚀 [TELEGRAM-ROBUST] Avvio invio robusto ({len(clean_msg)} caratteri, max {max_retries} retry)")
+    
+    # Informazioni per recovery
+    recovery_info = {
+        "original_length": len(clean_msg),
+        "attempts": 0,
+        "strategies_tried": [],
+        "errors_encountered": []
     }
     
-    print(f"🔍 [RENDER-DEBUG] Payload preparato, invio richiesta POST...")
-    
-    try:
-        print(f"🔍 [RENDER-DEBUG] Chiamata requests.post() con timeout 15s...")
-        r = requests.post(url, data=payload, timeout=15)  # Timeout aumentato per Render
+    for strategy_idx, strategy in enumerate(fallback_strategies):
+        strategy_name = strategy["name"]
+        parse_mode = strategy["parse_mode"]
+        msg_processor = strategy["msg_processor"]
         
-        print(f"🔍 [RENDER-DEBUG] Risposta ricevuta! Status Code: {r.status_code}")
-        print(f"🔍 [RENDER-DEBUG] Headers: {dict(r.headers)}")
+        print(f"🔄 [STRATEGY-{strategy_idx+1}] Tentativo con {strategy_name}...")
+        recovery_info["strategies_tried"].append(strategy_name)
         
-        if r.status_code == 200:
-            print(f"✅ [Telegram] Messaggio inviato con successo ({len(clean_msg)} caratteri)")
-            try:
-                response_json = r.json()
-                msg_id = response_json.get('result', {}).get('message_id', 'N/A')
-                print(f"✅ [RENDER-DEBUG] Message ID ricevuto: {msg_id}")
-            except:
-                print(f"⚠️ [RENDER-DEBUG] Impossibile parsare JSON response")
-            return True
-        else:
-            print(f"❌ [Telegram] Errore HTTP {r.status_code}")
-            print(f"❌ [RENDER-DEBUG] Response Text: {r.text[:300]}")
+        # Processa il messaggio secondo la strategia corrente
+        try:
+            processed_msg = msg_processor(clean_msg)
+        except Exception as proc_error:
+            print(f"⚠️ [STRATEGY-{strategy_idx+1}] Errore processing messaggio: {proc_error}")
+            recovery_info["errors_encountered"].append(f"Processing {strategy_name}: {proc_error}")
+            continue
+        
+        # Tenta l'invio con questa strategia usando retry automatico
+        for retry in range(max_retries):
+            recovery_info["attempts"] += 1
+            attempt_num = retry + 1
+            timeout = timeout_progression[min(retry, len(timeout_progression)-1)]
             
-            # Se fallisce con Markdown, prova senza formattazione
-            print(f"🔄 [RENDER-DEBUG] Tentativo fallback senza Markdown...")
-            fallback_msg = clean_msg.replace('*', '').replace('_', '').replace('`', '')
-            payload_fallback = {
+            print(f"📡 [ATTEMPT {recovery_info['attempts']}] {strategy_name} - Retry {attempt_num}/{max_retries} (timeout: {timeout}s)")
+            
+            payload = {
                 "chat_id": TELEGRAM_CHAT_ID,
-                "text": fallback_msg,
-                "parse_mode": None
+                "text": processed_msg,
+                "parse_mode": parse_mode
             }
             
-            print(f"🔍 [RENDER-DEBUG] Fallback: invio senza formattazione...")
-            r2 = requests.post(url, data=payload_fallback, timeout=15)
-            print(f"🔍 [RENDER-DEBUG] Fallback Status Code: {r2.status_code}")
-            
-            if r2.status_code == 200:
-                print(f"✅ [Telegram] Messaggio inviato senza formattazione")
-                try:
-                    response_json2 = r2.json()
-                    msg_id2 = response_json2.get('result', {}).get('message_id', 'N/A')
-                    print(f"✅ [RENDER-DEBUG] Fallback Message ID: {msg_id2}")
-                except:
-                    print(f"⚠️ [RENDER-DEBUG] Fallback: impossibile parsare JSON")
-                return True
-            else:
-                print(f"❌ [RENDER-DEBUG] Fallback failed: {r2.text[:200]}")
+            try:
+                # === TENTATIVO DI INVIO ===
+                start_time = time.time()
+                r = requests.post(url, data=payload, timeout=timeout)
+                elapsed = time.time() - start_time
                 
-            return False
-            
-    except requests.exceptions.Timeout as e:
-        print(f"❌ [Telegram] TIMEOUT dopo 15 secondi: {e}")
-        print(f"❌ [RENDER-DEBUG] Render potrebbe avere problemi di rete")
-        return False
-    except requests.exceptions.ConnectionError as e:
-        print(f"❌ [Telegram] ERRORE CONNESSIONE: {e}")
-        print(f"❌ [RENDER-DEBUG] Render blocca connessioni esterne?")
-        return False
-    except Exception as e:
-        print(f"❌ [Telegram] Errore generico: {e}")
-        print(f"❌ [RENDER-DEBUG] Tipo eccezione: {type(e).__name__}")
-        import traceback
-        tb = traceback.format_exc()
-        print(f"❌ [RENDER-DEBUG] Traceback: {tb[:400]}...")
-        return False
+                print(f"📊 [ATTEMPT {recovery_info['attempts']}] Risposta ricevuta in {elapsed:.2f}s - Status: {r.status_code}")
+                
+                # === SUCCESS CASE ===
+                if r.status_code == 200:
+                    try:
+                        response_json = r.json()
+                        msg_id = response_json.get('result', {}).get('message_id', 'N/A')
+                        print(f"✅ [SUCCESS] Messaggio inviato con {strategy_name}! ID: {msg_id}")
+                        print(f"📈 [STATS] Riuscito al tentativo {recovery_info['attempts']}/{max_retries * len(fallback_strategies)}")
+                        
+                        # Log statistiche successo
+                        if recovery_info['attempts'] > 1:
+                            print(f"🔄 [RECOVERY] Successo dopo {recovery_info['attempts']-1} fallimenti")
+                            print(f"🛠️ [RECOVERY] Strategie provate: {', '.join(recovery_info['strategies_tried'])}")
+                        
+                        return True
+                    except Exception as json_error:
+                        print(f"⚠️ [SUCCESS] Messaggio inviato ma errore parsing JSON: {json_error}")
+                        return True  # Il messaggio è stato comunque inviato
+                
+                # === ERROR HANDLING ===
+                elif r.status_code == 429:  # Rate limiting
+                    try:
+                        retry_after = int(r.headers.get('Retry-After', 30))
+                        print(f"⏳ [RATE-LIMIT] Rate limit hit. Retry after {retry_after}s")
+                        recovery_info["errors_encountered"].append(f"Rate limit: {retry_after}s")
+                        
+                        # Se è l'ultimo retry della strategia, aspetta e riprova
+                        if attempt_num < max_retries:
+                            time.sleep(min(retry_after, 60))  # Max 60s di attesa
+                            continue
+                    except (ValueError, KeyError):
+                        print(f"⚠️ [RATE-LIMIT] Rate limit senza Retry-After header")
+                        time.sleep(10)  # Fallback: attendi 10 secondi
+                        continue
+                
+                elif r.status_code == 400:  # Bad request - probabilmente problema di formattazione
+                    error_msg = r.text[:200] if hasattr(r, 'text') else "Unknown error"
+                    print(f"❌ [BAD-REQUEST] Errore 400 con {strategy_name}: {error_msg}")
+                    recovery_info["errors_encountered"].append(f"400 {strategy_name}: {error_msg[:100]}")
+                    break  # Non fare retry su questa strategia, passa alla prossima
+                
+                elif r.status_code >= 500:  # Server error - vale la pena riprovare
+                    error_msg = r.text[:200] if hasattr(r, 'text') else "Server error"
+                    print(f"🔄 [SERVER-ERROR] Errore {r.status_code}: {error_msg}")
+                    recovery_info["errors_encountered"].append(f"{r.status_code}: {error_msg[:100]}")
+                    
+                    # Backoff esponenziale per errori server
+                    if attempt_num < max_retries:
+                        sleep_time = min(backoff_factor ** retry, 30)  # Max 30s
+                        print(f"⏳ [BACKOFF] Attesa {sleep_time:.1f}s prima del retry...")
+                        time.sleep(sleep_time)
+                        continue
+                
+                else:  # Altri errori HTTP
+                    error_msg = r.text[:200] if hasattr(r, 'text') else f"HTTP {r.status_code}"
+                    print(f"❌ [HTTP-ERROR] Errore {r.status_code}: {error_msg}")
+                    recovery_info["errors_encountered"].append(f"{r.status_code}: {error_msg[:100]}")
+                    break  # Passa alla prossima strategia
+                    
+            except requests.exceptions.Timeout as timeout_error:
+                print(f"⏱️ [TIMEOUT] Timeout dopo {timeout}s al tentativo {attempt_num}")
+                recovery_info["errors_encountered"].append(f"Timeout {timeout}s")
+                
+                # Per timeout, vale sempre la pena riprovare con timeout maggiore
+                if attempt_num < max_retries:
+                    print(f"🔄 [TIMEOUT-RETRY] Nuovo tentativo con timeout maggiore...")
+                    continue
+                    
+            except requests.exceptions.ConnectionError as conn_error:
+                print(f"🌐 [CONNECTION] Errore connessione: {conn_error}")
+                recovery_info["errors_encountered"].append(f"Connection: {str(conn_error)[:100]}")
+                
+                # Per errori di connessione, attendi prima di riprovare
+                if attempt_num < max_retries:
+                    sleep_time = min(5 + retry * 2, 15)  # 5s, 7s, 9s, max 15s
+                    print(f"⏳ [CONNECTION-RETRY] Attesa {sleep_time}s per reconnection...")
+                    time.sleep(sleep_time)
+                    continue
+                    
+            except Exception as unexpected_error:
+                print(f"💥 [UNEXPECTED] Errore imprevisto: {type(unexpected_error).__name__}: {unexpected_error}")
+                recovery_info["errors_encountered"].append(f"Unexpected: {str(unexpected_error)[:100]}")
+                
+                # Per errori imprevisti, breve pausa e retry
+                if attempt_num < max_retries:
+                    time.sleep(2)
+                    continue
+        
+        # Finiti i retry per questa strategia
+        print(f"❌ [STRATEGY-{strategy_idx+1}] {strategy_name} fallita dopo {max_retries} tentativi")
     
-    finally:
-        print(f"🔍 [RENDER-DEBUG] === FINE INVIO TELEGRAM ===\n")
+    # === FALLIMENTO TOTALE ===
+    print(f"💥 [TOTAL-FAILURE] TUTTI i tentativi falliti dopo {recovery_info['attempts']} tentativi totali")
+    print(f"🚫 [FAILURE-STATS] Strategie provate: {', '.join(recovery_info['strategies_tried'])}")
+    print(f"📋 [ERROR-LOG] Errori incontrati:")
+    for i, error in enumerate(recovery_info['errors_encountered'][-5:], 1):  # Ultimi 5 errori
+        print(f"   {i}. {error}")
+    
+    # === ULTIMO TENTATIVO DI EMERGENZA ===
+    print(f"🆘 [EMERGENCY] Tentativo di emergenza con messaggio minimale...")
+    try:
+        emergency_msg = f"⚠️ MESSAGGIO SISTEMA - {datetime.datetime.now().strftime('%H:%M')}\nErrore invio report completo. Sistema operativo."
+        emergency_payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": emergency_msg,
+            "parse_mode": None
+        }
+        
+        r_emergency = requests.post(url, data=emergency_payload, timeout=10)
+        if r_emergency.status_code == 200:
+            print(f"🆘 [EMERGENCY] Messaggio di emergenza inviato con successo")
+            return False  # Ritorna False perché il messaggio originale è fallito, ma almeno abbiamo notificato
+    except Exception as emerg_error:
+        print(f"💥 [EMERGENCY] Anche il messaggio di emergenza è fallito: {emerg_error}")
+    
+    return False
+
+# Versione legacy mantenuta per compatibilità
+def _send_single_message(clean_msg, url):
+    """Versione legacy - wrapper per la nuova versione robusta"""
+    return _send_single_message_with_advanced_fallback(clean_msg, url, max_retries=2, backoff_factor=1.5)
 
 # === EVENTI ===
 today = datetime.date.today()
@@ -833,8 +1063,8 @@ def get_notizie_critiche():
     
     print(f"📊 [NEWS] Statistiche: {notizie_trovate} notizie analizzate, {notizie_recenti} recenti e critiche, {len(notizie_critiche)} selezionate")
     
-    # Limita a massimo 10 notizie critiche (divideremo il messaggio se necessario)
-    return notizie_critiche[:10]
+    # Limita a massimo 5 notizie critiche per velocizzare l'elaborazione
+    return notizie_critiche[:5]
 
 # === SCHEDULER EVENTI TELEGRAM ALLE 08:00 ===
 def genera_messaggio_eventi():
@@ -1941,72 +2171,10 @@ def generate_morning_news_briefing():
             morning_parts.append("❌ Errore nell'analisi ML del calendario")
             morning_parts.append("")
 
-        # === SEZIONE 4: INDICATORI TECNICI PRINCIPALI ===
-        try:
-            print("📈 [MORNING] Caricamento indicatori tecnici...")
-            df_indicators = get_all_signals_summary('1d')
-            
-            if not df_indicators.empty:
-                morning_parts.append("📈 *INDICATORI TECNICI PRINCIPALI*")
-                morning_parts.append("")
-                
-                for _, row in df_indicators.iterrows():
-                    # 5 indicatori principali per la mattina
-                    mac = "🟢" if row.get('MAC') == 'Buy' else "🔴" if row.get('MAC') == 'Sell' else "⚪"
-                    rsi = "🟢" if row.get('RSI') == 'Buy' else "🔴" if row.get('RSI') == 'Sell' else "⚪"
-                    macd = "🟢" if row.get('MACD') == 'Buy' else "🔴" if row.get('MACD') == 'Sell' else "⚪"
-                    bol = "🟢" if row.get('Bollinger') == 'Buy' else "🔴" if row.get('Bollinger') == 'Sell' else "⚪"
-                    ema = "🟢" if row.get('EMA') == 'Buy' else "🔴" if row.get('EMA') == 'Sell' else "⚪"
-                    
-                    # Calcola consenso sui 5 indicatori principali
-                    main_indicators = ['MAC', 'RSI', 'MACD', 'Bollinger', 'EMA']
-                    buy_count = sum(1 for ind in main_indicators if row.get(ind) == 'Buy')
-                    sell_count = sum(1 for ind in main_indicators if row.get(ind) == 'Sell')
-                    
-                    if buy_count > sell_count:
-                        consensus = f"🟢 BUY ({buy_count}/5)"
-                    elif sell_count > buy_count:
-                        consensus = f"🔴 SELL ({sell_count}/5)"
-                    else:
-                        consensus = f"⚪ HOLD ({buy_count}B/{sell_count}S)"
-                    
-                    morning_parts.append(f"📊 *{row['Asset']}*:")
-                    morning_parts.append(f"   Indicatori: MAC{mac} RSI{rsi} MACD{macd} BOL{bol} EMA{ema}")
-                    morning_parts.append(f"   Consenso: {consensus}")
-                    morning_parts.append("")
-                    rsi = "🟢" if row.get('RSI') == 'Buy' else "🔴" if row.get('RSI') == 'Sell' else "⚪"
-                    macd = "🟢" if row.get('MACD') == 'Buy' else "🔴" if row.get('MACD') == 'Sell' else "⚪"
-                    bol = "🟢" if row.get('Bollinger') == 'Buy' else "🔴" if row.get('Bollinger') == 'Sell' else "⚪"
-                    ema = "🟢" if row.get('EMA') == 'Buy' else "🔴" if row.get('EMA') == 'Sell' else "⚪"
-                    
-                    # Calcola consenso sui 5 indicatori principali
-                    main_indicators = ['MAC', 'RSI', 'MACD', 'Bollinger', 'EMA']
-                    buy_count = sum(1 for ind in main_indicators if row.get(ind) == 'Buy')
-                    sell_count = sum(1 for ind in main_indicators if row.get(ind) == 'Sell')
-                    
-                    if buy_count > sell_count:
-                        consensus = f"🟢 BUY ({buy_count}/5)"
-                    elif sell_count > buy_count:
-                        consensus = f"🔴 SELL ({sell_count}/5)"
-                    else:
-                        consensus = f"⚪ HOLD ({buy_count}B/{sell_count}S)"
-                    
-                    morning_parts.append(f"📊 *{row['Asset']}*:")
-                    morning_parts.append(f"   Indicatori: MAC{mac} RSI{rsi} MACD{macd} BOL{bol} EMA{ema}")
-                    morning_parts.append(f"   Consenso: {consensus}")
-                    morning_parts.append("")
-                
-                print("✅ [MORNING] Sezione indicatori tecnici aggiunta")
-            else:
-                morning_parts.append("📈 *INDICATORI TECNICI*")
-                morning_parts.append("⚠️ Nessun dato indicatori disponibile")
-                morning_parts.append("")
-                
-        except Exception as e:
-            print(f"❌ [MORNING] Errore caricamento indicatori: {e}")
-            morning_parts.append("📈 *INDICATORI TECNICI*")
-            morning_parts.append("❌ Errore nel caricamento indicatori")
-            morning_parts.append("")
+        # === SEZIONE 4: INDICATORI TECNICI RIMOSSA ===
+        # La rassegna stampa mattutina delle 09:00 contiene SOLO notizie + analisi ML
+        # Gli indicatori tecnici sono disponibili nel report giornaliero delle 13:00
+        print("🌅 [MORNING] Sezione indicatori tecnici saltata - solo rassegna stampa mattutina")
 
         # === INVIO DEL MESSAGGIO FINALE ===
         if morning_parts:
@@ -2945,9 +3113,26 @@ for model_name, (model_init, _) in models.items():
 # Function to get or load a model
 
 def get_model(model_name):
-    if loaded_models[model_name] is None:
-        loaded_models[model_name] = initialize_model(model_name)
-    return loaded_models[model_name]
+    """Carica o ritorna un modello ML con gestione sicura degli errori"""
+    try:
+        if model_name not in loaded_models:
+            print(f"⚠️ [ML-MODEL] Modello '{model_name}' non trovato in loaded_models")
+            return None
+            
+        if loaded_models[model_name] is None:
+            print(f"🔄 [ML-MODEL] Inizializzazione lazy loading per '{model_name}'...")
+            loaded_models[model_name] = initialize_model(model_name)
+            
+            if loaded_models[model_name] is None:
+                print(f"❌ [ML-MODEL] Impossibile inizializzare '{model_name}'")
+                return None
+            else:
+                print(f"✅ [ML-MODEL] '{model_name}' inizializzato con successo")
+                
+        return loaded_models[model_name]
+    except Exception as e:
+        print(f"❌ [ML-MODEL] Errore nel caricamento di '{model_name}': {e}")
+        return None
 
 # Modelli avanzati implementati con le librerie installate
 if TENSORFLOW_AVAILABLE:
@@ -3779,33 +3964,66 @@ def train_model(model_name_or_instance, df):
         try:
             prob_result = model.predict_proba(last_sample)
             
-            # Gestione più robusta del risultato della predizione
-            if hasattr(prob_result, 'shape') and len(prob_result.shape) > 0:
-                if len(prob_result.shape) == 2 and prob_result.shape[1] >= 2:
-                    prob = float(prob_result[0][1])  # Probabilità della classe 1
-                elif len(prob_result.shape) == 2 and prob_result.shape[1] == 1:
-                    prob = float(prob_result[0][0])  # Solo una probabilità disponibile
-                elif len(prob_result.shape) == 1 and len(prob_result) >= 2:
-                    prob = float(prob_result[1])  # Array 1D con almeno 2 elementi
-                elif len(prob_result.shape) == 1 and len(prob_result) == 1:
-                    prob = float(prob_result[0])  # Array 1D con un elemento
-                else:
-                    print(f"Unexpected prob_result shape: {prob_result.shape}")
-                    prob = 0.5
-            elif isinstance(prob_result, (list, tuple)):
-                if len(prob_result) > 0:
-                    if isinstance(prob_result[0], (list, tuple, np.ndarray)) and len(prob_result[0]) >= 2:
-                        prob = float(prob_result[0][1])
-                    elif isinstance(prob_result[0], (list, tuple, np.ndarray)) and len(prob_result[0]) == 1:
-                        prob = float(prob_result[0][0])
+            # FIX: Gestione sicura del risultato della predizione
+            # Prima controlla se prob_result è None
+            if prob_result is None:
+                print("predict_proba returned None")
+                prob = 0.5
+            # Controlla se è un numero scalare (int, float)
+            elif isinstance(prob_result, (int, float, np.integer, np.floating)):
+                prob = float(prob_result)
+            # Gestione array numpy
+            elif hasattr(prob_result, 'shape') and hasattr(prob_result, '__getitem__'):
+                try:
+                    if len(prob_result.shape) == 0:  # Scalare numpy
+                        prob = float(prob_result)
+                    elif len(prob_result.shape) == 1:
+                        if len(prob_result) >= 2:
+                            prob = float(prob_result[1])  # Classe 1
+                        elif len(prob_result) == 1:
+                            prob = float(prob_result[0])
+                        else:
+                            prob = 0.5
+                    elif len(prob_result.shape) == 2:
+                        if prob_result.shape[1] >= 2:
+                            prob = float(prob_result[0][1])  # Prima riga, classe 1
+                        elif prob_result.shape[1] == 1:
+                            prob = float(prob_result[0][0])
+                        else:
+                            prob = 0.5
                     else:
-                        prob = float(prob_result[0]) if len(prob_result) == 1 else 0.5
-                else:
+                        print(f"Unexpected prob_result shape: {prob_result.shape}")
+                        prob = 0.5
+                except (IndexError, TypeError, ValueError) as idx_err:
+                    print(f"Index/Type error in prob_result access: {idx_err}")
+                    prob = 0.5
+            # Gestione liste/tuple
+            elif isinstance(prob_result, (list, tuple)):
+                try:
+                    if len(prob_result) == 0:
+                        prob = 0.5
+                    elif len(prob_result) >= 2:
+                        if isinstance(prob_result[0], (list, tuple, np.ndarray)):
+                            if len(prob_result[0]) >= 2:
+                                prob = float(prob_result[0][1])
+                            else:
+                                prob = float(prob_result[0][0])
+                        else:
+                            prob = float(prob_result[1])  # Secondo elemento per classe 1
+                    else:
+                        if isinstance(prob_result[0], (list, tuple, np.ndarray)):
+                            prob = float(prob_result[0][0])
+                        else:
+                            prob = float(prob_result[0])
+                except (IndexError, TypeError, ValueError) as idx_err:
+                    print(f"Index/Type error in prob_result list access: {idx_err}")
                     prob = 0.5
             else:
+                # Ultimo tentativo: conversione diretta
                 try:
                     prob = float(prob_result)
                 except (ValueError, TypeError):
+                    print(f"Cannot convert prob_result to float: {type(prob_result)} = {prob_result}")
                     prob = 0.5
         except Exception as e:
             print(f"Prediction error: {e}")
@@ -3816,27 +4034,76 @@ def train_model(model_name_or_instance, df):
         
         # Accuratezza
         try:
-            if len(X_test) > 0 and len(y_test) > 0 and len(y_test.unique()) >= 2:
-                y_pred = model.predict(X_test)
-                # Ensure predictions have the right shape and length
-                if hasattr(y_pred, 'shape') and len(y_pred.shape) > 1:
-                    y_pred = y_pred.flatten()
-                
-                # Check if prediction is a single value but test set has multiple values
-                if len(y_pred) == 1 and len(y_test) > 1:
-                    # This happens with some models that return a single prediction
-                    # Use a simplified accuracy based on the single prediction
-                    single_pred = y_pred[0] if hasattr(y_pred, '__len__') else y_pred
-                    # Compare against the most frequent class in y_test
-                    most_frequent_class = y_test.mode().iloc[0] if len(y_test.mode()) > 0 else 0
-                    acc = 0.6 if single_pred == most_frequent_class else 0.4  # Simplified accuracy
-                elif len(y_pred) == len(y_test):
-                    acc = accuracy_score(y_test, y_pred)
-                else:
-                    # Still a mismatch, use default
+            # FIX 2: Gestione sicura di X_test e y_test per evitare 'index X is out of bounds'
+            if len(X_test) > 0 and len(y_test) > 0:
+                # Verifica che X_test non sia vuoto
+                if X_test.shape[0] == 0:
+                    print("X_test has 0 rows, using default accuracy")
                     acc = 0.5
+                elif y_test.shape[0] == 0:
+                    print("y_test has 0 rows, using default accuracy")
+                    acc = 0.5
+                elif len(y_test.unique()) < 2:
+                    print(f"y_test has only {len(y_test.unique())} unique class(es), using default accuracy")
+                    acc = 0.5
+                else:
+                    try:
+                        y_pred = model.predict(X_test)
+                        
+                        # FIX 2a: Gestione sicura di y_pred per evitare errori di forma
+                        if y_pred is None:
+                            print("model.predict returned None")
+                            acc = 0.5
+                        elif hasattr(y_pred, 'shape') and len(y_pred.shape) > 1:
+                            # Flatten multidimensional predictions
+                            y_pred = y_pred.flatten()
+                        elif not hasattr(y_pred, '__len__'):
+                            # Single scalar prediction
+                            y_pred = [y_pred]
+                        
+                        # FIX 2b: Verifica dimensioni compatibili
+                        if len(y_pred) == 0:
+                            print("y_pred is empty after processing")
+                            acc = 0.5
+                        elif len(y_pred) == 1 and len(y_test) > 1:
+                            # Single prediction vs multiple test values
+                            print(f"Single prediction ({y_pred[0]}) vs {len(y_test)} test values")
+                            try:
+                                single_pred = y_pred[0] if hasattr(y_pred, '__len__') else y_pred
+                                
+                                # FIX 2c: Gestione sicura di mode() per evitare index out of bounds
+                                y_test_mode = y_test.mode()
+                                if len(y_test_mode) > 0 and y_test_mode.shape[0] > 0:
+                                    most_frequent_class = y_test_mode.iloc[0]
+                                else:
+                                    # Fallback: usa il primo valore di y_test
+                                    most_frequent_class = y_test.iloc[0] if len(y_test) > 0 else 0
+                                
+                                acc = 0.6 if single_pred == most_frequent_class else 0.4
+                                print(f"Single prediction accuracy: {acc} (pred={single_pred}, mode={most_frequent_class})")
+                            except Exception as single_pred_err:
+                                print(f"Error in single prediction accuracy: {single_pred_err}")
+                                acc = 0.5
+                        elif len(y_pred) == len(y_test):
+                            # Compatible dimensions
+                            try:
+                                acc = accuracy_score(y_test, y_pred)
+                                print(f"Standard accuracy calculated: {acc}")
+                            except Exception as acc_err:
+                                print(f"Error calculating accuracy_score: {acc_err}")
+                                acc = 0.5
+                        else:
+                            # Dimension mismatch
+                            print(f"Dimension mismatch: y_pred={len(y_pred)}, y_test={len(y_test)}")
+                            acc = 0.5
+                            
+                    except Exception as pred_error:
+                        print(f"Error in model.predict: {pred_error}")
+                        acc = 0.5
             else:
+                print(f"Insufficient test data: X_test={len(X_test) if hasattr(X_test, '__len__') else 'N/A'}, y_test={len(y_test) if hasattr(y_test, '__len__') else 'N/A'}")
                 acc = 0.5
+                
         except Exception as e:
             print(f"Accuracy calculation error: {e}")
             acc = 0.5
@@ -3958,15 +4225,13 @@ app.layout = html.Div([
             html.H1("🚀 Segnali Tecnici Completi", 
                    style={'margin': '0', 'textAlign': 'center', 'flex': '2', 'color': '#2c3e50'}),
             
-            # Pulsante a destra
+            # === PULSANTE CSV INDICATORI RIMOSSO ===
+            # Il download CSV è gestito internamente per sincronizzazione
             html.Div([
-                html.Button("📄 Scarica CSV Indicatori", id="export-summary-button", 
-                           style={'padding': '10px 15px', 'backgroundColor': '#28a745', 'color': 'white', 
-                                 'border': 'none', 'borderRadius': '5px', 'cursor': 'pointer',
-                                 'fontWeight': 'bold', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)', 'transition': 'all 0.3s ease'}),
+                html.Div("📊 Visualizzazione Segnali Tecnici", 
+                        style={'padding': '10px 15px', 'color': '#28a745', 'fontWeight': 'bold',
+                              'textAlign': 'center'}),
             ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'flex-end', 'flex': '1'}),
-            
-            dcc.Download(id="download-summary-csv"),
         ], style={'display': 'flex', 'alignItems': 'center', 'padding': '20px', 'backgroundColor': '#e8f5e8', 
                  'borderBottom': '2px solid #28a745', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'}),
         
@@ -4017,15 +4282,13 @@ app.layout = html.Div([
             html.H1("🤖 Previsioni con Modelli di Machine Learning", 
                    style={'margin': '0', 'textAlign': 'center', 'flex': '2', 'color': '#2c3e50'}),
             
-            # Pulsante esporta CSV a destra
+            # === PULSANTE CSV ML RIMOSSO ===
+            # Il download CSV è gestito internamente per sincronizzazione
             html.Div([
-                html.Button("📄 Scarica CSV Previsioni", id="btn-export", n_clicks=0,
-                           style={'padding': '10px 15px', 'backgroundColor': '#28a745', 'color': 'white', 
-                                 'border': 'none', 'borderRadius': '5px', 'cursor': 'pointer',
-                                 'fontWeight': 'bold', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)', 'transition': 'all 0.3s ease'}),
+                html.Div("🤖 Analisi Machine Learning", 
+                        style={'padding': '10px 15px', 'color': '#6f42c1', 'fontWeight': 'bold',
+                              'textAlign': 'center'}),
             ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'flex-end', 'flex': '1'}),
-            
-            dcc.Download(id="download-dataframe-csv"),
         ], style={'display': 'flex', 'alignItems': 'center', 'padding': '20px', 'backgroundColor': '#e8f5e8', 
                  'borderBottom': '2px solid #28a745', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)', 'marginTop': '20px'}),
         
@@ -4090,16 +4353,12 @@ def update_main_tab_content(active_tab):
                 html.H1("📆 Calendario Economico", 
                        style={'margin': '0', 'textAlign': 'center', 'flex': '2', 'color': '#2c3e50'}),
                 
-                # Pulsante CSV a destra
+                # === PULSANTE CSV CALENDARIO RIMOSSO ===
+                # Il download CSV è gestito internamente per sincronizzazione
                 html.Div([
-                    html.A(
-                        '📄 Scarica CSV Calendario',
-                        id='download-link',
-                        href='/download_eventi.csv',
-                        style={'padding': '10px 15px', 'backgroundColor': '#28a745', 'color': 'white',
-                               'border': 'none', 'borderRadius': '5px', 'textDecoration': 'none', 
-                               'cursor': 'pointer'}
-                    )
+                    html.Div("📅 Eventi Economici", 
+                            style={'padding': '10px 15px', 'color': '#28a745', 'fontWeight': 'bold',
+                                  'textAlign': 'center'}),
                 ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'flex-end', 'flex': '1'}),
             ], style={'display': 'flex', 'alignItems': 'center', 'padding': '20px', 'backgroundColor': '#e8f5e8', 
                      'borderBottom': '2px solid #28a745', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'}),
@@ -4134,13 +4393,12 @@ def update_main_tab_content(active_tab):
                 html.H1("📰 Rassegna Stampa", 
                        style={'margin': '0', 'textAlign': 'center', 'flex': '2', 'color': '#2c3e50'}),
                 
-                # Pulsante CSV a destra
+                # === PULSANTE CSV NOTIZIE RIMOSSO ===
+                # Il download CSV è gestito internamente per sincronizzazione
                 html.Div([
-                    html.Button("📄 Scarica CSV Notizie", id="export-news-button", 
-                               style={'padding': '10px 15px', 'backgroundColor': '#28a745', 'color': 'white', 
-                                     'border': 'none', 'borderRadius': '5px', 'cursor': 'pointer',
-                                     'fontWeight': 'bold', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)', 'transition': 'all 0.3s ease'}),
-                    dcc.Download(id="download-news-csv"),
+                    html.Div("📰 Rassegna Stampa", 
+                            style={'padding': '10px 15px', 'color': '#dc3545', 'fontWeight': 'bold',
+                                  'textAlign': 'center'}),
                 ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'flex-end', 'flex': '1'}),
             ], style={'display': 'flex', 'alignItems': 'center', 'padding': '20px', 'backgroundColor': '#e8f5e8', 
                      'borderBottom': '2px solid #28a745', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'}),
@@ -4781,57 +5039,139 @@ from dash import no_update
 # La rassegna stampa rimane disponibile solo tramite scheduling automatico alle 09:00
 
 def process_indicators_sequentially(assets_list, timeframe='1d'):
-    """Elabora indicatori tecnici in modo sequenziale per gestire la RAM"""
+    """Elabora indicatori tecnici in modo sequenziale con gestione RAM ottimizzata"""
     import gc
+    import psutil
     processed_results = []
     
     print(f"⚙️ [SEQUENTIAL-INDICATORS] Elaborazione sequenziale di {len(assets_list)} asset...")
     
+    # Controllo memoria iniziale
+    try:
+        initial_memory = psutil.virtual_memory().percent
+        print(f"💾 [RAM] Memoria iniziale: {initial_memory:.1f}%")
+    except:
+        initial_memory = None
+    
     for i, (asset_name, asset_code, data_type) in enumerate(assets_list, 1):
         try:
+            # Controllo memoria prima di ogni elaborazione
+            if initial_memory:
+                try:
+                    current_memory = psutil.virtual_memory().percent
+                    if current_memory > 85:  # Soglia di sicurezza
+                        print(f"⚠️ [RAM] Memoria alta ({current_memory:.1f}%), pulizia forzata...")
+                        gc.collect()
+                        time.sleep(2)  # Pausa extra per stabilizzazione
+                        current_memory = psutil.virtual_memory().percent
+                        print(f"💾 [RAM] Dopo pulizia: {current_memory:.1f}%")
+                except:
+                    pass
+            
             print(f"   📊 [{i}/{len(assets_list)}] Elaborando {asset_name}...")
             
-            # Carica dati per singolo asset
-            if data_type == "crypto":
-                df_asset = load_crypto_data(asset_code)
-                if not df_asset.empty:
-                    start_date = datetime.datetime.now() - datetime.timedelta(days=365)
-                    df_asset = df_asset[df_asset.index >= start_date]
-            else:  # FRED data
-                end_date = datetime.datetime.today()
-                start_date = get_start_date(timeframe)
-                df_asset = load_data_fred(asset_code, start_date, end_date)
-            
-            if df_asset.empty:
-                print(f"     ⚠️ Dati vuoti per {asset_name}, skip")
+            # Carica dati per singolo asset con timeout
+            df_asset = None
+            try:
+                if data_type == "crypto":
+                    df_asset = load_crypto_data(asset_code)
+                    if not df_asset.empty:
+                        start_date = datetime.datetime.now() - datetime.timedelta(days=365)
+                        df_asset = df_asset[df_asset.index >= start_date]
+                else:  # FRED data
+                    end_date = datetime.datetime.today()
+                    start_date = get_start_date(timeframe)
+                    df_asset = load_data_fred(asset_code, start_date, end_date)
+                    
+                if df_asset is None or df_asset.empty:
+                    print(f"     ⚠️ Dati vuoti per {asset_name}, skip")
+                    continue
+                    
+            except Exception as load_error:
+                print(f"     ❌ Errore caricamento dati {asset_name}: {load_error}")
                 continue
             
-            # Calcola indicatori per questo asset
-            indicators = calculate_technical_indicators(df_asset)
+            # Calcola indicatori per questo asset con gestione errori migliorata
+            indicators = None
+            try:
+                indicators = calculate_technical_indicators(df_asset)
+                
+                # Prepara row per risultato
+                row = {'Asset': asset_name}
+                for key, signal in indicators.items():
+                    try:
+                        last_signal = signal_text(signal[signal != 0].iloc[-1]) if not signal[signal != 0].empty else 'Hold'
+                        row[key] = last_signal
+                    except:
+                        row[key] = 'Hold'  # Fallback sicuro
+                
+                processed_results.append(row)
+                print(f"     ✅ {asset_name} completato ({len(indicators)} indicatori)")
+                
+            except Exception as calc_error:
+                print(f"     ❌ Errore calcolo indicatori {asset_name}: {calc_error}")
+                # Aggiungi row vuoto per mantenere coerenza
+                row = {'Asset': asset_name}
+                for key in ['MAC', 'RSI', 'MACD', 'Bollinger', 'EMA']:
+                    row[key] = 'Hold'
+                processed_results.append(row)
             
-            # Prepara row per risultato
-            row = {'Asset': asset_name}
-            for key, signal in indicators.items():
-                last_signal = signal_text(signal[signal != 0].iloc[-1]) if not signal[signal != 0].empty else 'Hold'
-                row[key] = last_signal
-            
-            processed_results.append(row)
-            print(f"     ✅ {asset_name} completato ({len(indicators)} indicatori)")
-            
-            # Pulizia memoria dopo ogni asset
-            del df_asset, indicators
-            gc.collect()
-            
-            # Piccola pausa per evitare overload
-            if i < len(assets_list):
-                time.sleep(0.5)
+            # Pulizia memoria aggressiva dopo ogni asset
+            try:
+                if df_asset is not None:
+                    del df_asset
+                if indicators is not None:
+                    del indicators
+                # Pulizia locale delle variabili
+                locals().clear()
+                gc.collect()
+                
+                # Pausa adattiva basata sulla memoria
+                if initial_memory:
+                    try:
+                        current_memory = psutil.virtual_memory().percent
+                        if current_memory > 80:
+                            pause_time = 2.0  # Pausa lunga se memoria alta
+                        elif current_memory > 70:
+                            pause_time = 1.0  # Pausa media
+                        else:
+                            pause_time = 0.5  # Pausa normale
+                    except:
+                        pause_time = 1.0
+                else:
+                    pause_time = 1.0
+                
+                if i < len(assets_list):
+                    time.sleep(pause_time)
+                    
+            except Exception as cleanup_error:
+                print(f"     ⚠️ Errore pulizia memoria: {cleanup_error}")
+                time.sleep(1.0)  # Pausa di sicurezza
             
         except Exception as e:
-            print(f"     ❌ Errore elaborando {asset_name}: {e}")
+            print(f"     ❌ Errore generale elaborando {asset_name}: {e}")
+            # Aggiungi row di fallback per evitare asset mancanti
+            try:
+                row = {'Asset': asset_name}
+                for key in ['MAC', 'RSI', 'MACD', 'Bollinger', 'EMA']:
+                    row[key] = 'Hold'
+                processed_results.append(row)
+            except:
+                pass
             continue
     
-    # Pulizia finale
-    gc.collect()
+    # Pulizia finale aggressiva
+    try:
+        gc.collect()
+        if initial_memory:
+            try:
+                final_memory = psutil.virtual_memory().percent
+                print(f"💾 [RAM] Memoria finale: {final_memory:.1f}% (iniziale: {initial_memory:.1f}%)")
+            except:
+                pass
+    except:
+        pass
+        
     print(f"✅ [SEQUENTIAL-INDICATORS] Elaborazione completata: {len(processed_results)} asset processati")
     
     return pd.DataFrame(processed_results)
