@@ -88,6 +88,7 @@ La dashboard sarà disponibile su: **http://localhost:8050**
 |------|-------------|-----|
 | `555.py` | Dashboard principale locale | Principale da Google Drive |
 | `555-server.py` | Versione deploy Render | Produzione cloud |
+| `555serverlite.py` | **🚀 PROGETTO PARALLELO** - Versione ottimizzata RAM | Deploy cloud ottimizzato |
 | `555bt.py` | Modulo backtest | Analisi storiche |
 | `wallet.py` | Dashboard portafoglio | Gestione wallet |
 | `sync_system.py` | Sincronizzazione dati | Sync Drive-cloud |
@@ -167,10 +168,10 @@ python H:\Il mio Drive\555\555.py
 
 2. **Variabili d'Ambiente**:
    ```bash
-   PORT=10000
-   RENDER_EXTERNAL_URL=https://tua-app.render.com
-   TELEGRAM_TOKEN=il_tuo_token
-   TELEGRAM_CHAT_ID=@il_tuo_canale
+   PORT=10000                              # Auto-fornita da Render
+   RENDER_EXTERNAL_URL=https://five55-c3xl.onrender.com  # Per sistema backup
+   TELEGRAM_TOKEN=il_tuo_token             # Opzionale (già hardcoded)
+   TELEGRAM_CHAT_ID=@il_tuo_canale         # Opzionale (già hardcoded)
    ```
 
 3. **URL Deploy**: L'app sarà disponibile all'URL fornito da Render
@@ -344,8 +345,10 @@ TELEGRAM_CHAT_ID = "@canale"         # Con @ iniziale
 #### **4. Render deployment issues**
 ```bash
 # Verifica variabili d'ambiente su Render dashboard:
-PORT=10000
-RENDER_EXTERNAL_URL=https://tua-app.render.com
+PORT=10000                              # Auto-fornita da Render
+RENDER_EXTERNAL_URL=https://five55-c3xl.onrender.com  # Per sistema backup
+TELEGRAM_TOKEN=your_token               # Opzionale
+TELEGRAM_CHAT_ID=@your_chat             # Opzionale
 ```
 
 #### **5. Errori modelli ML**
@@ -450,7 +453,7 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
 
 ## 🔗 Links Utili
 
-- 📊 **Dashboard Demo**: [Live Demo](https://five55-7ozo.onrender.com)
+- 📊 **Dashboard Demo**: [Live Demo](https://five55-c3xl.onrender.com)
 - 📚 **Documentazione Completa**: `DOCUMENTAZIONE_COMPLETA_555.md`
 - 🗺️ **Mappa Codice**: `MAPPA_CODICE_555.md`
 - 📝 **Changelog**: `RIASSUNTO_555.txt`

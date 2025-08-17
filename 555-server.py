@@ -6741,33 +6741,12 @@ def schedule_telegram_reports():
             # - Rassegna stampa mattutina (09:00)
             # - Report giornaliero completo (13:00)
             
-            # INVIO RASSEGNA STAMPA MATTUTINA ALLE 09:00 (ora italiana)
+            # === RASSEGNE STAMPA DELEGATE AL SISTEMA 555-LITE ===
+            # Le rassegne stampa sono ora gestite dal sistema ottimizzato 555-serverlite
             if (now.hour == 9 and now.minute == 0):
-                if is_feature_enabled("scheduled_reports"):
-                    try:
-                        print(f"🌅 [SCHEDULER] Trigger delle 09:00 rilevato - Avvio rassegna stampa mattutina...")
-                        
-                        # Chiama la funzione di rassegna stampa mattutina completa
-                        print("📰 [SCHEDULER] Generazione rassegna stampa mattutina...")
-                        success = generate_morning_news_briefing()
-                        
-                        if success:
-                            # Crea flag per tracking
-                            today_morning_file = os.path.join('salvataggi', f'morning_news_sent_{now.strftime("%Y%m%d")}.flag')
-                            with open(today_morning_file, 'w') as f:
-                                f.write(f"Morning news sent at {now.strftime('%Y-%m-%d %H:%M:%S')}\n")
-                            print("✅ [SCHEDULER] Rassegna stampa mattutina inviata con successo")
-                        else:
-                            print("❌ [SCHEDULER] Rassegna stampa mattutina fallita")
-                        
-                    except Exception as e:
-                        print(f"❌ [SCHEDULER] Errore critico durante la rassegna delle 09:00: {e}")
-                        import traceback
-                        traceback.print_exc()
-                else:
-                    print(f"ℹ️ [SCHEDULER] Rassegna delle 09:00 saltata - funzione scheduled_reports disabilitata")
-                
-                time.sleep(60)  # Pausa per evitare invii multipli nello stesso minuto
+                print(f"ℹ️ [SISTEMA-PRINCIPALE] Rassegna stampa 09:00 delegata a 555-serverlite")
+                print(f"📊 [DASHBOARD] Sistema principale si concentra su dashboard e UI")
+                time.sleep(60)  # Pausa per evitare log multipli
             
             # INVIO REPORT GIORNALIERO COMPLETO ALLE 13:00 OGNI GIORNO (ora italiana)
             elif (now.hour == 13 and now.minute == 0):
@@ -6832,7 +6811,7 @@ def smart_keep_alive():
         import pytz
         italy_tz = pytz.timezone('Europe/Rome')
         # Fix per Render - USA URL corretto del deploy
-        app_url = os.environ.get('RENDER_EXTERNAL_URL', 'https://five55-dd08.onrender.com')
+        app_url = os.environ.get('RENDER_EXTERNAL_URL', 'https://five55-c3xl.onrender.com')
         # Se siamo in locale, usa localhost
         if port == 8050:
             app_url = 'http://localhost:8050'

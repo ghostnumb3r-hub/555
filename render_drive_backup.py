@@ -11,9 +11,11 @@ from pathlib import Path
 
 class RenderDriveBackup:
     def __init__(self):
-        self.render_url = "https://five55-7ozo.onrender.com"
+        # Usa variabile d'ambiente se disponibile, altrimenti fallback
+        self.render_url = os.getenv('RENDER_EXTERNAL_URL', 'https://five55-c3xl.onrender.com')
         # Configurazione per Google Drive (userà l'API di Google Drive)
         self.backup_enabled = True
+        print(f"🔧 [RENDER-BACKUP] Configurato URL: {self.render_url}")
         
     def get_italy_timestamp(self):
         """Ottiene timestamp italiano"""

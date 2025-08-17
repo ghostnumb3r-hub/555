@@ -20,7 +20,7 @@ Render (Cloud) ↔️ sync_system.py ↔️ Google Drive/555/salvataggi/ ↔️ 
 
 **Configurazione sync:**
 - Posizione Drive: `H:\Il mio Drive\555\`
-- URL Render: `https://five55-dd08.onrender.com`
+- URL Render: `https://five55-c3xl.onrender.com`
 - Backup Render: **17:05** ogni giorno (NUOVO ORARIO)
 - Modalità: Auto (confronta timestamp, sincronizza il più recente)
 
@@ -148,7 +148,8 @@ df_old_news = pd.read_csv(cumulative_news_path)
 ## 🔧 **CONFIGURAZIONI CHIAVE**
 
 ### **URLs e Percorsi:**
-- Render: `https://five55-7ozo.onrender.com`
+- Render: `https://five55-c3xl.onrender.com`
+- Render External URL: Configurabile tramite `RENDER_EXTERNAL_URL`
 - Locale: `C:\Users\valen\555\salvataggi`
 - Cache: `salvataggi/data_cache.pkl`
 
